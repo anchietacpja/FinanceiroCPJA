@@ -1061,7 +1061,7 @@ export default function App() {
                 
                 <div className="text-center md:text-right">
                   <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest italic">
-                      {SCHOOL_NAME} • Hub Financeiro
+                      {SCHOOL_NAME} • Centro Financeiro
                   </p>
                   <p className="text-[9px] font-medium text-white/20 uppercase tracking-tighter mt-1">
                     © 2024 Todos os direitos reservados
@@ -1088,23 +1088,30 @@ export default function App() {
       <nav className="fixed bottom-0 left-0 w-full h-16 bg-white border-t border-slate-200 flex flex-row md:fixed md:left-0 md:top-0 md:h-full md:w-64 md:border-r md:border-t-0 md:flex-col z-50">
         <div className="p-8 hidden md:flex flex-col gap-6">
            <div className="flex items-center gap-3">
-             <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm overflow-hidden border border-slate-100 p-0.5">
+            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-md overflow-hidden border border-slate-100 p-1.5 hover:scale-105 transition-transform duration-500">
                 <img src={APP_LOGO} alt="Platform Logo" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
              </div>
            </div>
            <div>
              <h1 className="font-black text-sm tracking-tighter text-slate-900 leading-tight uppercase italic">{SCHOOL_NAME}</h1>
-             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5 leading-none">Hub Financeiro</p>
+             <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-0.5 leading-none">Centro Financeiro</p>
            </div>
         </div>
 
         <div className="flex-1 flex flex-row md:flex-col items-center justify-around md:justify-start px-2 md:px-4 md:mt-4 md:space-y-1">
           <button 
             onClick={() => setActiveTab('dashboard')}
-            className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 p-2 md:p-3.5 rounded-xl transition-all ${activeTab === 'dashboard' ? 'bg-orange-50 text-orange-900 shadow-sm' : 'text-slate-400 hover:text-orange-600 hover:bg-orange-50/50'}`}
+            className={`flex flex-col md:flex-row items-center gap-3 p-4 md:p-5 rounded-2xl transition-all border-2 ${activeTab === 'dashboard' ? 'bg-orange-50/50 border-orange-100 text-orange-950 shadow-sm' : 'border-transparent text-slate-400 hover:text-orange-600 hover:bg-orange-50/30'}`}
           >
-            <LayoutDashboard size={20} />
-            <span className="font-bold text-[10px] md:text-sm">Início</span>
+            <div className={`p-2 rounded-xl ${activeTab === 'dashboard' ? 'bg-white shadow-sm text-orange-600' : 'bg-slate-50 text-slate-400'}`}>
+              <LayoutDashboard size={20} />
+            </div>
+            <div className="text-left">
+              <p className="text-[11px] font-black uppercase tracking-widest leading-none mb-1">Início</p>
+              <p className="text-[10px] font-bold text-orange-900/40 leading-tight">
+                Não se trata de quanto você ganha, mas de como você gerencia o seu dinheiro.
+              </p>
+            </div>
           </button>
           <button 
             onClick={() => setActiveTab('transactions')}

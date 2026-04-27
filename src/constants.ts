@@ -5,8 +5,8 @@
 
 import { Category, FundSource } from './types';
 import logo from './logoo.png';
-import logoAnchieta from '../logo_anchieta.png';
-import logoCPJA from '../logo_cpja.jpg';
+import logoAnchieta from './logo_anchieta.png';
+import logoCPJA from './logo_cpja.jpg';
 
 export const CATEGORIES: { value: Category; label: string; color: string }[] = [
   { value: 'escola', label: 'Escola (Geral)', color: 'bg-orange-500' },
