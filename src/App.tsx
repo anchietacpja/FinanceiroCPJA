@@ -100,6 +100,8 @@ export default function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isParsingPDF, setIsParsingPDF] = useState(false);
   const [periodFilter, setPeriodFilter] = useState<'thisMonth' | 'lastMonth' | 'all'>('thisMonth');
+  const [reportYear, setReportYear] = useState<number>(new Date().getFullYear());
+  const [reportMonth, setReportMonth] = useState<string | 'all'>(new Date().getMonth().toString());
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmDeleteMember, setConfirmDeleteMember] = useState<TeamMember | null>(null);
@@ -367,7 +369,7 @@ export default function App() {
     const currentYear = now.getFullYear();
 
     return authorizedTransactions.filter(t => {
-      const tDate = new Date(t.date);
+      const tDate = new Date(t.date + 'T00:00:00');
       if (periodFilter === 'all') return true;
       if (periodFilter === 'thisMonth') {
         return tDate.getMonth() === currentMonth && tDate.getFullYear() === currentYear;
@@ -392,7 +394,7 @@ export default function App() {
 
     const now = new Date();
     periodFilteredTransactions.forEach(t => {
-      const tDate = new Date(t.date);
+      const tDate = new Date(t.date + 'T00:00:00');
       const day = tDate.getDate();
       if (tDate.getMonth() === now.getMonth() && tDate.getFullYear() === now.getFullYear()) {
         if (t.type === 'income') data[day - 1].income += t.amount;
@@ -839,6 +841,7 @@ export default function App() {
             src="https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=2070&auto=format&fit=crop" 
             alt="School Background"
             className="w-full h-full object-cover opacity-30 grayscale"
+            referrerPolicy="no-referrer"
           />
           <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-900/90 to-orange-900/40"></div>
           {/* Subtle Grid Pattern Overlay */}
@@ -858,7 +861,7 @@ export default function App() {
                     whileHover={{ scale: 1.05 }}
                     className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-2xl overflow-hidden border border-white/20 p-2"
                   >
-                    <img src={APP_LOGO} alt="Developer Logo" className="w-full h-full object-contain brightness-0 invert" />
+                    <img src={APP_LOGO} alt="Developer Logo" className="w-full h-full object-contain brightness-0 invert" referrerPolicy="no-referrer" />
                   </motion.div>
                 </div>
                 <div className="h-12 w-[1px] bg-white/20"></div>
@@ -1048,7 +1051,7 @@ export default function App() {
               >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-white/5 backdrop-blur-md rounded-xl flex items-center justify-center text-white border border-white/10 overflow-hidden">
-                    <img src={APP_LOGO} className="w-full h-full object-contain brightness-0 invert opacity-40" alt="Nokite Logo" />
+                    <img src={APP_LOGO} className="w-full h-full object-contain brightness-0 invert opacity-40" alt="Nokite Logo" referrerPolicy="no-referrer" />
                   </div>
                   <div>
                     <p className="text-[9px] font-black uppercase text-white/30 tracking-[0.3em] leading-none mb-1.5">Desenvolvido por</p>
@@ -1086,7 +1089,7 @@ export default function App() {
         <div className="p-8 hidden md:flex flex-col gap-6">
            <div className="flex items-center gap-3">
              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-sm overflow-hidden border border-slate-100 p-0.5">
-                <img src={APP_LOGO} alt="Platform Logo" className="w-full h-full object-contain" />
+                <img src={APP_LOGO} alt="Platform Logo" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
              </div>
            </div>
            <div>
@@ -1156,7 +1159,7 @@ export default function App() {
 
         <div className="hidden md:block p-6 border-t border-slate-100 mt-auto">
           <div className="flex items-center gap-3 mb-6 px-2 hidden md:flex">
-             <img src={user.photoURL || ''} alt="" className="w-9 h-9 rounded-lg border-2 border-white shadow-sm" />
+             <img src={user.photoURL || ''} alt="" className="w-9 h-9 rounded-lg border-2 border-white shadow-sm" referrerPolicy="no-referrer" />
              <div className="overflow-hidden">
                <p className="text-xs font-bold text-slate-800 truncate">{user.displayName}</p>
                <p className="text-[10px] text-slate-400 font-medium truncate">{user.email}</p>
@@ -1173,7 +1176,7 @@ export default function App() {
           <div className="hidden md:block pt-6 border-t border-slate-50">
             <div className="flex flex-col items-center gap-2 opacity-20 hover:opacity-100 transition-opacity duration-500">
                <div className="w-6 h-6">
-                 <img src={APP_LOGO} className="w-full h-full object-contain grayscale" alt="" />
+                 <img src={APP_LOGO} className="w-full h-full object-contain grayscale" alt="" referrerPolicy="no-referrer" />
                </div>
                <p className="text-[7px] font-black text-slate-400 uppercase tracking-[0.5em]">Powered by</p>
                <h3 className="text-[10px] font-black text-slate-900 tracking-tighter uppercase italic">{PLATFORM_NAME}</h3>
@@ -1257,6 +1260,7 @@ export default function App() {
                  src="https://images.unsplash.com/photo-1544717297-fa157a92af0c?q=80&w=2070&auto=format&fit=crop" 
                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000"
                  alt="Students"
+                 referrerPolicy="no-referrer"
                />
                <div className="absolute inset-0 bg-gradient-to-r from-slate-900/80 via-slate-900/40 to-transparent flex items-center px-10">
                   <div className="max-w-md space-y-4">
@@ -2051,14 +2055,23 @@ export default function App() {
                   <div className="space-y-4">
                     <div>
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Ano de Referência</label>
-                      <select className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 font-bold text-xs uppercase tracking-widest">
-                        <option>2026</option>
-                        <option>2025</option>
+                      <select 
+                        value={reportYear}
+                        onChange={(e) => setReportYear(parseInt(e.target.value))}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 font-bold text-xs uppercase tracking-widest"
+                      >
+                        <option value={2026}>2026</option>
+                        <option value={2025}>2025</option>
+                        <option value={2024}>2024</option>
                       </select>
                     </div>
                     <div>
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Mês Competência</label>
-                      <select className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 font-bold text-xs uppercase tracking-widest">
+                      <select 
+                        value={reportMonth}
+                        onChange={(e) => setReportMonth(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 font-bold text-xs uppercase tracking-widest"
+                      >
                         <option value="all">Todos os Meses</option>
                         <option value="0">Janeiro</option>
                         <option value="1">Fevereiro</option>
@@ -2075,7 +2088,7 @@ export default function App() {
                       </select>
                     </div>
                     <button 
-                      onClick={() => exportTransactionsToCSV(transactions)}
+                      onClick={() => exportTransactionsToCSV(periodFilteredTransactions)}
                       className="w-full mt-6 bg-slate-800 hover:bg-slate-900 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all uppercase text-xs tracking-widest"
                     >
                       <Download size={18} />
@@ -2092,8 +2105,14 @@ export default function App() {
                     <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest mb-8">Consolidado por Categoria</h3>
                     <div className="space-y-6">
                       {CATEGORIES.map(cat => {
-                        const catTotal = transactions
-                          .filter(t => t.category === cat.value)
+                        const catTotal = authorizedTransactions
+                          .filter(t => {
+                            if (t.category !== cat.value) return false;
+                            const tDate = new Date(t.date + 'T00:00:00');
+                            const matchesYear = tDate.getFullYear() === reportYear;
+                            const matchesMonth = reportMonth === 'all' || tDate.getMonth().toString() === reportMonth;
+                            return matchesYear && matchesMonth;
+                          })
                           .reduce((acc, t) => {
                             if (t.type === 'income') return acc + t.amount;
                             if (t.type === 'expense') return acc - t.amount;
@@ -2106,7 +2125,7 @@ export default function App() {
                               <div className={`w-3 h-10 rounded-full ${cat.color}`}></div>
                               <div>
                                 <p className="text-xs font-black text-slate-800 uppercase tracking-widest">{cat.label}</p>
-                                <p className="text-[10px] text-slate-400 font-medium">Acumulado Geral</p>
+                                <p className="text-[10px] text-slate-400 font-medium">Acumulado no Período</p>
                               </div>
                             </div>
                             <p className={`text-lg font-mono font-bold ${catTotal < 0 ? 'text-slate-900' : 'text-emerald-600'}`}>

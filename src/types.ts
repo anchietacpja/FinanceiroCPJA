@@ -37,7 +37,7 @@ export interface Transaction {
   fundSource: FundSource;  // De onde saiu o dinheiro (Caixa Escola, Banco, Pessoal, Cantina)
   toFundSource?: FundSource; // Para transferências
   userId: string;
-  createdAt: number;
+  createdAt: any;
 }
 
 export type DebtType = 'card' | 'loan' | 'other';
@@ -55,7 +55,7 @@ export interface Debt {
   remainingInstallments?: number;
   installmentValue?: number;
   userId: string;
-  createdAt: number;
+  createdAt: any;
 }
 
 export type BillStatus = 'pending' | 'paid';
@@ -68,7 +68,7 @@ export interface Bill {
   category: Category;
   status: BillStatus;
   userId: string;
-  createdAt: number;
+  createdAt: any;
 }
 
 export type WalletBalance = {
