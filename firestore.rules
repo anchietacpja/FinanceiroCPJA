@@ -1,0 +1,106 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Connection Test
+    match /test/connection {
+      allow read: if true;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email != null;
+    }
+    
+    function getMemberData() {
+      return get(/databases/$(database)/documents/team_members/$(request.auth.token.email)).data;
+    }
+    
+    function isMemberOf(tenantId) {
+      return isSignedIn() && (
+        request.auth.uid == tenantId ||
+        (exists(/databases/$(database)/documents/team_members/$(request.auth.token.email)) && 
+         get(/databases/$(database)/documents/team_members/$(request.auth.token.email)).data.tenantId == tenantId)
+      );
+    }
+    
+    function isOwnerOf(tenantId) {
+      return isSignedIn() && (
+        request.auth.uid == tenantId ||
+        (exists(/databases/$(database)/documents/team_members/$(request.auth.token.email)) && 
+         get(/databases/$(database)/documents/team_members/$(request.auth.token.email)).data.tenantId == tenantId &&
+         get(/databases/$(database)/documents/team_members/$(request.auth.token.email)).data.role == 'owner')
+      );
+    }
+
+    function isRootOwnerOf(tenantId) {
+      return isSignedIn() && request.auth.uid == tenantId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function isValidString(val, max) {
+      return val is string && val.size() <= max;
+    }
+
+    // --- team_members ---
+    match /team_members/{email} {
+      allow get: if isSignedIn() && (request.auth.token.email == email || isOwnerOf(resource.data.tenantId));
+      allow list: if isSignedIn() && isOwnerOf(resource.data.tenantId);
+
+      allow create: if isSignedIn() && (
+        // Self-registration as owner (happens on first login)
+        (request.auth.token.email == email && incoming().role == 'owner' && incoming().tenantId == request.auth.uid) ||
+        // Owner inviting someone
+        (isOwnerOf(incoming().tenantId) && (incoming().role == 'viewer' || incoming().role == 'owner'))
+      ) && incoming().email == email;
+
+      allow delete: if isSignedIn() && (
+        // Root owner can delete any record except their personal record (to prevent locking themselves out if email matches)
+        (isRootOwnerOf(resource.data.tenantId) && request.auth.token.email != email) ||
+        // Other owners can delete non-owners
+        (isOwnerOf(resource.data.tenantId) && resource.data.role != 'owner')
+      );
+    }
+
+    // --- transactions ---
+    match /transactions/{id} {
+      allow read: if isSignedIn() && isMemberOf(resource.data.userId);
+      
+      allow create: if isSignedIn() && isOwnerOf(incoming().userId) && 
+                    isValidString(incoming().description, 200) &&
+                    incoming().amount is number;
+                    
+      allow update: if isSignedIn() && isOwnerOf(resource.data.userId) &&
+                    incoming().userId == resource.data.userId;
+                    
+      allow delete: if isSignedIn() && isOwnerOf(resource.data.userId);
+    }
+
+    // --- debts ---
+    match /debts/{id} {
+      // Viewer cannot see debts
+      allow read: if isSignedIn() && isOwnerOf(resource.data.userId);
+      allow write: if isSignedIn() && isOwnerOf(resource.data.userId || incoming().userId);
+    }
+
+    // --- bills ---
+    match /bills/{id} {
+      allow read: if isSignedIn() && isMemberOf(resource.data.userId);
+      
+      allow create: if isSignedIn() && isOwnerOf(incoming().userId) &&
+                    isValidString(incoming().description, 200);
+                    
+      allow update: if isSignedIn() && isOwnerOf(resource.data.userId) &&
+                    incoming().userId == resource.data.userId;
+                    
+      allow delete: if isSignedIn() && isOwnerOf(resource.data.userId);
+    }
+  }
+}

@@ -1,0 +1,85 @@
+{
+  "entities": {
+    "Transaction": {
+      "title": "Transaction",
+      "description": "A financial transaction representing Income, Expense, or Transfer.",
+      "type": "object",
+      "properties": {
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["income", "expense", "transfer"] },
+        "category": { "type": "string" },
+        "fundSource": { "type": "string" },
+        "toFundSource": { "type": "string", "description": "Mandatory for transfers" },
+        "description": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "createdAt": { "type": "integer" },
+        "userId": { "type": "string" }
+      },
+      "required": ["amount", "type", "category", "fundSource", "description", "date", "createdAt", "userId"]
+    },
+    "Debt": {
+      "title": "Debt",
+      "description": "A liability like a credit card, loan, or other pending debt.",
+      "type": "object",
+      "properties": {
+        "description": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "dueDate": { "type": "string", "format": "date" },
+        "type": { "type": "string", "enum": ["card", "loan", "other"] },
+        "status": { "type": "string", "enum": ["active", "paid"] },
+        "installments": { "type": "number" },
+        "remainingInstallments": { "type": "number" },
+        "installmentValue": { "type": "number" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "integer" }
+      },
+      "required": ["description", "totalAmount", "paidAmount", "type", "status", "userId", "createdAt"]
+    },
+    "Bill": {
+      "title": "Bill",
+      "description": "An account payable (monthly bill, invoice, etc.) indexed by day.",
+      "type": "object",
+      "properties": {
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "dueDate": { "type": "string", "format": "date" },
+        "category": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "paid"] },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "integer" }
+      },
+      "required": ["description", "amount", "dueDate", "category", "status", "userId", "createdAt"]
+    },
+    "TeamMember": {
+      "title": "TeamMember",
+      "description": "An invited team member with specific access role.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["owner", "viewer"] },
+        "tenantId": { "type": "string" },
+        "invitedAt": { "type": "integer" }
+      },
+      "required": ["email", "role", "tenantId", "invitedAt"]
+    }
+  },
+  "firestore": {
+    "transactions": {
+      "schema": "Transaction",
+      "description": "Collection of all financial transactions."
+    },
+    "debts": {
+      "schema": "Debt",
+      "description": "Collection of financial liabilities."
+    },
+    "bills": {
+      "schema": "Bill",
+      "description": "Collection of scheduled bills to pay."
+    },
+    "team_members": {
+      "schema": "TeamMember",
+      "description": "Collection of invited team members."
+    }
+  }
+}
