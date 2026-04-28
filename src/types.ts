@@ -88,5 +88,6 @@ export interface TeamMember {
   permissions?: {
     categories?: Category[];
     fundSources?: FundSource[];
+    tabs?: string[];
   };
 }

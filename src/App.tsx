@@ -339,6 +339,31 @@ export default function App() {
     return () => unsubscribe();
   }, [user, currentTenantId]);
 
+  useEffect(() => {
+    if (userRole === 'viewer' && userPermissions?.tabs && !userPermissions.tabs.includes(activeTab)) {
+      // If viewer is on a tab they don't have access to, redirect to first allowed or dashboard if allowed
+      const allowedTabs = userPermissions.tabs;
+      if (allowedTabs.length > 0) {
+        setActiveTab(allowedTabs[0] as any);
+      }
+    }
+  }, [userRole, userPermissions, activeTab]);
+
+  // Contas autorizadas conforme as permissões do usuário
+  const authorizedBills = useMemo(() => {
+    if (userRole === 'owner') return bills;
+    if (userRole === 'viewer') {
+      let filtered = [...bills];
+      if (userPermissions) {
+        if (userPermissions.categories) {
+          filtered = filtered.filter(b => userPermissions.categories?.includes(b.category));
+        }
+      }
+      return filtered;
+    }
+    return bills;
+  }, [bills, userRole, userPermissions]);
+
   const isRootOwner = useMemo(() => user?.uid === currentTenantId, [user, currentTenantId]);
 
   // Transações autorizadas conforme as permissões do usuário
@@ -346,16 +371,28 @@ export default function App() {
     // Proprietário vê tudo
     if (userRole === 'owner') return transactions;
     
-    // Se não tem permissões definidas, por padrão vê tudo ou restringe? (Usuário pediu para definir o que podem ver)
-    // Se for viewer e tiver permissões, filtramos.
-    if (userRole === 'viewer' && userPermissions) {
+    // Se for viewer e tiver permissões, filtramos rigorosamente
+    if (userRole === 'viewer') {
       let filtered = [...transactions];
-      if (userPermissions.categories && userPermissions.categories.length > 0) {
-        filtered = filtered.filter(t => userPermissions.categories?.includes(t.category));
+      
+      // Se as permissões estão definidas, aplicamos os filtros
+      if (userPermissions) {
+        // Filtrar por categorias (se a lista existir, o usuário só vê o que está nela)
+        if (userPermissions.categories) {
+          filtered = filtered.filter(t => userPermissions.categories?.includes(t.category));
+        }
+        
+        // Filtrar por origens/contas (se a lista existir, o usuário só vê o que está nela)
+        if (userPermissions.fundSources) {
+          filtered = filtered.filter(t => userPermissions.fundSources?.includes(t.fundSource));
+        }
+      } else {
+        // Se for um viewer sem objeto de permissões no banco, bloqueamos por segurança ou mostramos tudo?
+        // Em um sistema profissional, se não tem permissão definida, não vê nada ou vê o básico.
+        // Vamos permitir ver tudo como fallback se o objeto for totalmente nulo (legado), 
+        // mas restringir se as listas estiverem presentes.
       }
-      if (userPermissions.fundSources && userPermissions.fundSources.length > 0) {
-        filtered = filtered.filter(t => userPermissions.fundSources?.includes(t.fundSource));
-      }
+      
       return filtered;
     }
     
@@ -856,12 +893,18 @@ export default function App() {
               className="flex flex-col items-center lg:items-start gap-12"
             >
               <div className="flex items-center gap-6">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   <motion.div 
                     whileHover={{ scale: 1.05 }}
-                    className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center shadow-2xl overflow-hidden border border-white/20 p-2"
+                    className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-2xl overflow-hidden border border-slate-100 p-2"
                   >
-                    <img src={APP_LOGO} alt="Developer Logo" className="w-full h-full object-contain brightness-0 invert" referrerPolicy="no-referrer" />
+                    <img src={LOGO_ANCHIETA} alt="School Logo 1" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                  </motion.div>
+                  <motion.div 
+                    whileHover={{ scale: 1.05 }}
+                    className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-2xl overflow-hidden border border-slate-100 p-2"
+                  >
+                    <img src={LOGO_CPJA} alt="School Logo 2" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
                   </motion.div>
                 </div>
                 <div className="h-12 w-[1px] bg-white/20"></div>
@@ -1050,12 +1093,12 @@ export default function App() {
                 className="mt-8 flex flex-col md:flex-row items-center justify-between gap-6 px-6"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-white/5 backdrop-blur-md rounded-xl flex items-center justify-center text-white border border-white/10 overflow-hidden">
-                    <img src={APP_LOGO} className="w-full h-full object-contain brightness-0 invert opacity-40" alt="Nokite Logo" referrerPolicy="no-referrer" />
+                  <div className="bg-white rounded-2xl p-2.5 flex items-center justify-center shadow-lg border border-white/20">
+                    <img src={APP_LOGO} className="w-8 h-8 object-contain" alt="Nokite Logo" referrerPolicy="no-referrer" />
                   </div>
                   <div>
-                    <p className="text-[9px] font-black uppercase text-white/30 tracking-[0.3em] leading-none mb-1.5">Desenvolvido por</p>
-                    <p className="text-xs font-black text-white uppercase tracking-wider">Nokite Hub Sistemas</p>
+                    <p className="text-[9px] font-black uppercase text-white/40 tracking-[0.3em] leading-none mb-1.5">Arquitetura de Software</p>
+                    <p className="text-xs font-black text-white uppercase tracking-wider">{PLATFORM_NAME} HUB</p>
                   </div>
                 </div>
                 
@@ -1085,43 +1128,44 @@ export default function App() {
       <div className="fixed inset-0 z-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'repeating-linear-gradient(transparent, transparent 31px, #94a3b8 31px, #94a3b8 32px)' }}></div>
 
       {/* Sidebar Navigation */}
-      <nav className="fixed bottom-0 left-0 w-full h-16 bg-white border-t border-slate-200 flex flex-row md:fixed md:left-0 md:top-0 md:h-full md:w-64 md:border-r md:border-t-0 md:flex-col z-50">
-        <div className="p-8 hidden md:flex flex-col gap-6">
-           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-md overflow-hidden border border-slate-100 p-1.5 hover:scale-105 transition-transform duration-500">
-                <img src={APP_LOGO} alt="Platform Logo" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+      <nav className="fixed bottom-0 left-0 w-full h-18 md:h-full bg-white border-t border-slate-200 flex flex-row md:fixed md:left-0 md:top-0 md:w-64 md:border-r md:border-t-0 md:flex-col z-50 shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.05)] md:shadow-none">
+        <div className="p-6 hidden md:flex flex-col gap-4">
+           <div className="flex items-center gap-2">
+             <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow-sm overflow-hidden border border-slate-100 p-1 hover:scale-110 transition-transform duration-500">
+                <img src={LOGO_ANCHIETA} alt="School Logo" title="Colégio Anchieta" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+             </div>
+             <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow-sm overflow-hidden border border-slate-100 p-1 hover:scale-110 transition-transform duration-500">
+                <img src={LOGO_CPJA} alt="CPJA Logo" title="CPJA" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
              </div>
            </div>
            <div>
-             <h1 className="font-black text-sm tracking-tighter text-slate-900 leading-tight uppercase italic">{SCHOOL_NAME}</h1>
-             <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mt-0.5 leading-none">Centro Financeiro</p>
-           </div>
-        </div>
+              <h1 className="font-black text-[13px] tracking-tighter text-slate-900 leading-tight uppercase italic">{SCHOOL_NAME}</h1>
+              <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mt-0.5 leading-none">Centro Financeiro</p>
+            </div>
+         </div>
 
-        <div className="flex-1 flex flex-row md:flex-col items-center justify-around md:justify-start px-2 md:px-4 md:mt-4 md:space-y-1">
-          <button 
-            onClick={() => setActiveTab('dashboard')}
-            className={`flex flex-col md:flex-row items-center gap-3 p-4 md:p-5 rounded-2xl transition-all border-2 ${activeTab === 'dashboard' ? 'bg-orange-50/50 border-orange-100 text-orange-950 shadow-sm' : 'border-transparent text-slate-400 hover:text-orange-600 hover:bg-orange-50/30'}`}
-          >
-            <div className={`p-2 rounded-xl ${activeTab === 'dashboard' ? 'bg-white shadow-sm text-orange-600' : 'bg-slate-50 text-slate-400'}`}>
+        <div className="flex-1 flex flex-row md:flex-col items-center justify-around md:justify-start px-2 md:px-4 md:mt-2 md:space-y-0.5 md:overflow-y-auto custom-scrollbar">
+          {(userRole === 'owner' || (userPermissions?.tabs?.includes('dashboard') ?? true)) && (
+            <button 
+              onClick={() => setActiveTab('dashboard')}
+              className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 p-2 md:p-3.5 rounded-xl transition-all ${activeTab === 'dashboard' ? 'bg-orange-50 text-orange-900 shadow-sm' : 'text-slate-400 hover:text-orange-600 hover:bg-orange-50/50'}`}
+            >
               <LayoutDashboard size={20} />
-            </div>
-            <div className="text-left">
-              <p className="text-[11px] font-black uppercase tracking-widest leading-none mb-1">Início</p>
-              <p className="text-[10px] font-bold text-orange-900/40 leading-tight">
-                Não se trata de quanto você ganha, mas de como você gerencia o seu dinheiro.
-              </p>
-            </div>
-          </button>
-          <button 
-            onClick={() => setActiveTab('transactions')}
-            className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 p-2 md:p-3.5 rounded-xl transition-all ${activeTab === 'transactions' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
-          >
-            <History size={20} />
-            <span className="font-bold text-[10px] md:text-sm">Extrato</span>
-          </button>
+              <span className="font-bold text-[10px] md:text-sm">Início</span>
+            </button>
+          )}
+
+          {(userRole === 'owner' || userPermissions?.tabs?.includes('transactions')) && (
+            <button 
+              onClick={() => setActiveTab('transactions')}
+              className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 p-2 md:p-3.5 rounded-xl transition-all ${activeTab === 'transactions' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+            >
+              <History size={20} />
+              <span className="font-bold text-[10px] md:text-sm">Extrato</span>
+            </button>
+          )}
           
-          {userRole === 'owner' && (
+          {(userRole === 'owner' || userPermissions?.tabs?.includes('debts')) && (
             <button 
               onClick={() => setActiveTab('debts')}
               className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 p-2 md:p-3.5 rounded-xl transition-all ${activeTab === 'debts' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
@@ -1131,20 +1175,25 @@ export default function App() {
             </button>
           )}
 
-          <button 
-            onClick={() => setActiveTab('payables')}
-            className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 p-2 md:p-3.5 rounded-xl transition-all ${activeTab === 'payables' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
-          >
-            <Calendar size={20} />
-            <span className="font-bold text-[10px] md:text-sm">Contas</span>
-          </button>
-          <button 
-            onClick={() => setActiveTab('reports')}
-            className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 p-2 md:p-3.5 rounded-xl transition-all ${activeTab === 'reports' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
-          >
-            <Receipt size={20} />
-            <span className="font-bold text-[10px] md:text-sm">Relatos</span>
-          </button>
+          {(userRole === 'owner' || userPermissions?.tabs?.includes('payables')) && (
+            <button 
+              onClick={() => setActiveTab('payables')}
+              className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 p-2 md:p-3.5 rounded-xl transition-all ${activeTab === 'payables' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+            >
+              <Calendar size={20} />
+              <span className="font-bold text-[10px] md:text-sm">Contas</span>
+            </button>
+          )}
+          
+          {(userRole === 'owner' || userPermissions?.tabs?.includes('reports')) && (
+            <button 
+              onClick={() => setActiveTab('reports')}
+              className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 p-2 md:p-3.5 rounded-xl transition-all ${activeTab === 'reports' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+            >
+              <Receipt size={20} />
+              <span className="font-bold text-[10px] md:text-sm">Relatos</span>
+            </button>
+          )}
 
           {userRole === 'owner' && (
             <button 
@@ -1164,35 +1213,38 @@ export default function App() {
           </button>
         </div>
 
-        <div className="hidden md:block p-6 border-t border-slate-100 mt-auto">
-          <div className="flex items-center gap-3 mb-6 px-2 hidden md:flex">
-             <img src={user.photoURL || ''} alt="" className="w-9 h-9 rounded-lg border-2 border-white shadow-sm" referrerPolicy="no-referrer" />
+        <div className="hidden md:block p-4 border-t border-slate-100 mt-auto">
+          <div className="flex items-center gap-3 mb-4 px-2 hidden md:flex">
+             <img src={user.photoURL || ''} alt="" className="w-8 h-8 rounded-lg border-2 border-white shadow-sm" referrerPolicy="no-referrer" />
              <div className="overflow-hidden">
-               <p className="text-xs font-bold text-slate-800 truncate">{user.displayName}</p>
-               <p className="text-[10px] text-slate-400 font-medium truncate">{user.email}</p>
+               <p className="text-[10px] font-bold text-slate-800 truncate leading-none mb-0.5">{user.displayName}</p>
+               <p className="text-[9px] text-slate-400 font-medium truncate leading-none">{user.email}</p>
              </div>
           </div>
           <button 
             onClick={logout}
-            className="w-full flex items-center gap-3 p-3 text-slate-400 hover:text-red-600 transition-colors group mb-4"
+            className="w-full flex items-center gap-3 p-2.5 text-slate-400 hover:text-red-600 transition-colors group mb-2"
           >
-            <LogOut size={20} className="group-hover:-translate-x-1 transition-transform" />
-            <span className="font-bold text-sm hidden md:block uppercase tracking-widest">Sair</span>
+            <LogOut size={18} className="group-hover:-translate-x-1 transition-transform" />
+            <span className="font-bold text-xs hidden md:block uppercase tracking-widest">Sair</span>
           </button>
 
-          <div className="hidden md:block pt-6 border-t border-slate-50">
-            <div className="flex flex-col items-center gap-2 opacity-20 hover:opacity-100 transition-opacity duration-500">
-               <div className="w-6 h-6">
-                 <img src={APP_LOGO} className="w-full h-full object-contain grayscale" alt="" referrerPolicy="no-referrer" />
+          <div className="hidden md:block pt-4 border-t border-slate-100 mt-2 bg-white/50 rounded-t-2xl -mx-4 px-4 pb-2 group/dev">
+            <div className="flex flex-col items-center gap-1.5 transition-all duration-500">
+               <div className="w-8 h-8 bg-white rounded-lg p-1 border border-slate-200 shadow-sm group-hover/dev:shadow-md transition-all group-hover/dev:scale-105">
+                 <img src={APP_LOGO} className="w-full h-full object-contain" alt="Nokite Logo" referrerPolicy="no-referrer" />
                </div>
-               <p className="text-[7px] font-black text-slate-400 uppercase tracking-[0.5em]">Powered by</p>
-               <h3 className="text-[10px] font-black text-slate-900 tracking-tighter uppercase italic">{PLATFORM_NAME}</h3>
+               <div className="text-center">
+                 <p className="text-[6px] font-black text-slate-400 uppercase tracking-[0.5em] mb-0.5 opacity-60 leading-none">Desenvolvido por</p>
+                 <h3 className="text-[9px] font-black text-slate-900 tracking-tighter uppercase italic leading-none">{PLATFORM_NAME} HUB</h3>
+               </div>
             </div>
           </div>
         </div>
       </nav>
 
-      <main className="pb-24 md:pb-10 md:ml-64 p-4 md:p-10 relative z-10">
+      <main className="pb-28 md:pb-10 md:ml-64 p-4 md:p-10 relative z-10 min-h-screen flex flex-col">
+        <div className="flex-1">
         {activeTab === 'dashboard' && (
           <div className="relative mb-12">
             {/* Decorative background elements */}
@@ -1535,29 +1587,42 @@ export default function App() {
             </div>
             
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-orange-500 rounded-3xl p-10 text-white shadow-[0_20px_50px_rgba(249,115,22,0.3)] overflow-hidden relative group border-2 border-orange-400">
-                  <div className="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-40 transition-opacity">
-                    <GraduationCap size={80} />
+                {/* Receita Acadêmica - Tuition Category */}
+                {(userRole === 'owner' || (userPermissions?.categories?.includes('tuition') ?? true)) && (
+                  <div className="bg-orange-500 rounded-3xl p-10 text-white shadow-[0_20px_50px_rgba(249,115,22,0.3)] overflow-hidden relative group border-2 border-orange-400">
+                    <div className="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-40 transition-opacity">
+                      <GraduationCap size={80} />
+                    </div>
+                    <p className="text-[11px] font-black uppercase tracking-[0.3em] mb-2 opacity-80 italic">Receita Acadêmica</p>
+                    <p className="text-3xl font-mono font-black tracking-tighter">R$ {(schoolMetrics.tuition || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                    <p className="text-[10px] mt-4 font-black uppercase opacity-60">Mensalidades CPJA</p>
                   </div>
-                  <p className="text-[11px] font-black uppercase tracking-[0.3em] mb-2 opacity-80 italic">Receita Acadêmica</p>
-                  <p className="text-3xl font-mono font-black tracking-tighter">R$ {(schoolMetrics.tuition || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                  <p className="text-[10px] mt-4 font-black uppercase opacity-60">Mensalidades CPJA</p>
-                </div>
-                <div className="bg-slate-900 rounded-3xl p-10 text-white shadow-[0_20px_50px_rgba(15,23,42,0.3)] overflow-hidden relative group border-2 border-slate-700">
-                  <div className="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-40 transition-opacity">
-                    <Users size={80} />
+                )}
+                
+                {/* Folha de Pagamento - Payroll Category */}
+                {(userRole === 'owner' || (userPermissions?.categories?.includes('payroll') ?? true)) && (
+                  <div className="bg-slate-900 rounded-3xl p-10 text-white shadow-[0_20px_50px_rgba(15,23,42,0.3)] overflow-hidden relative group border-2 border-slate-700">
+                    <div className="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-40 transition-opacity">
+                      <Users size={80} />
+                    </div>
+                    <p className="text-[11px] font-black uppercase tracking-[0.3em] mb-2 opacity-60 italic">Folha de Pagamento</p>
+                    <p className="text-3xl font-mono font-black tracking-tighter text-orange-400">R$ {(schoolMetrics.payroll || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                    <p className="text-[10px] mt-4 font-black uppercase opacity-40">Salários e Encargos</p>
                   </div>
-                  <p className="text-[11px] font-black uppercase tracking-[0.3em] mb-2 opacity-60 italic">Folha de Pagamento</p>
-                  <p className="text-3xl font-mono font-black tracking-tighter text-orange-400">R$ {(schoolMetrics.payroll || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                  <p className="text-[10px] mt-4 font-black uppercase opacity-40">Salários e Encargos</p>
-                </div>
-                <div className="bg-white border-2 border-slate-900 rounded-3xl p-10 text-slate-800 shadow-[12px_12px_0px_0px_rgba(15,23,42,1)] hover:shadow-[16px_16px_0px_0px_rgba(15,23,42,1)] transition-all group overflow-hidden relative">
-                  <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] mb-2 italic">Eventos Escolares</p>
-                  <p className="text-3xl font-mono font-black tracking-tighter text-blue-600">R$ {(schoolMetrics.events || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                  <div className="mt-6 h-2 w-full bg-slate-50 rounded-full overflow-hidden border border-slate-100">
-                     <div className="h-full bg-blue-500 w-2/3"></div>
+                )}
+
+                {/* Eventos Escolares - Events Category */}
+                {(userRole === 'owner' || (userPermissions?.categories?.includes('events') ?? true)) && (
+                  <div className="bg-white border-2 border-slate-900 rounded-3xl p-10 text-slate-800 shadow-[12px_12px_0px_0px_rgba(15,23,42,1)] hover:shadow-[16px_16px_0px_0px_rgba(15,23,42,1)] transition-all group overflow-hidden relative">
+                    <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] mb-2 italic">Eventos Escolares</p>
+                    <p className="text-3xl font-mono font-black tracking-tighter text-blue-600">R$ {(schoolMetrics.events || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                    <div className="mt-6 h-2 w-full bg-slate-50 rounded-full overflow-hidden border border-slate-100">
+                       <div className="h-full bg-blue-500 w-2/3"></div>
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {/* Always show debt but could be filtered if we had debt categories */}
                 <div className="bg-white border-2 border-slate-900 rounded-3xl p-10 text-slate-800 shadow-[12px_12px_0px_0px_rgba(15,23,42,1)] hover:shadow-[16px_16px_0px_0px_rgba(15,23,42,1)] transition-all group overflow-hidden relative">
                   <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] mb-2 italic">Passivo Exposto</p>
                   <p className="text-3xl font-mono font-black tracking-tighter text-red-500">R$ {schoolMetrics.totalDebt.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
@@ -1951,7 +2016,7 @@ export default function App() {
             </div>
 
             <div className="grid grid-cols-1 gap-8">
-              {bills.length === 0 ? (
+              {authorizedBills.length === 0 ? (
                 <div className="bg-slate-50 border-4 border-dashed border-slate-200 rounded-[3rem] p-24 text-center group">
                   <div className="w-48 h-48 mx-auto mb-8 bg-white rounded-full flex items-center justify-center border-4 border-slate-100 overflow-hidden shadow-2xl">
                      <img 
@@ -1962,10 +2027,10 @@ export default function App() {
                      />
                   </div>
                   <h4 className="text-xl font-black text-slate-800 uppercase tracking-tighter mb-2 italic">Agenda Livre</h4>
-                  <p className="text-slate-400 font-black uppercase text-[10px] tracking-[0.2em] max-w-xs mx-auto">Todos os seus compromissos agendados estão em dia. Bom trabalho!</p>
+                  <p className="text-slate-400 font-black uppercase text-[10px] tracking-[0.2em] max-w-xs mx-auto">Nenhum compromisso pendente encontrado para o seu nível de acesso.</p>
                 </div>
               ) : (
-                Object.entries(bills.reduce((acc, bill) => {
+                Object.entries(authorizedBills.reduce((acc, bill) => {
                   const date = bill.dueDate;
                   if (!acc[date]) acc[date] = [];
                   acc[date].push(bill);
@@ -2111,7 +2176,10 @@ export default function App() {
                   <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
                     <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest mb-8">Consolidado por Categoria</h3>
                     <div className="space-y-6">
-                      {CATEGORIES.map(cat => {
+                      {CATEGORIES.filter(cat => 
+                        userRole === 'owner' || 
+                        (userPermissions?.categories?.includes(cat.value) ?? true)
+                      ).map(cat => {
                         const catTotal = authorizedTransactions
                           .filter(t => {
                             if (t.category !== cat.value) return false;
@@ -2566,6 +2634,9 @@ export default function App() {
             </div>
           </>
         )}
+        </div>
+        {/* Scroll Headroom */}
+        <div className="h-20 w-full pointer-events-none"></div>
       </main>
 
       {/* Add Transaction Modal - Geometric Style */}
@@ -3322,7 +3393,58 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="space-y-8">
+                <div className="space-y-8 max-h-[60vh] overflow-y-auto px-1 custom-scrollbar">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Páginas Autorizadas</label>
+                      <button 
+                        onClick={() => {
+                          const allTabs = ['dashboard', 'transactions', 'debts', 'payables', 'reports'];
+                          setEditingPermissionsMember(prev => prev ? {
+                            ...prev,
+                            permissions: { ...prev.permissions, tabs: allTabs }
+                          } : null);
+                        }}
+                        className="text-[10px] font-black text-orange-600 uppercase tracking-widest"
+                      >
+                        Ativar Tudo
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2">
+                      {[
+                        { id: 'dashboard', label: 'Início', icon: LayoutDashboard },
+                        { id: 'transactions', label: 'Extrato', icon: History },
+                        { id: 'debts', label: 'Dívidas', icon: CreditCard },
+                        { id: 'payables', label: 'Contas', icon: Calendar },
+                        { id: 'reports', label: 'Relatos', icon: Receipt },
+                      ].map(tab => (
+                        <label key={tab.id} className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl cursor-pointer hover:bg-slate-100 transition-all border border-transparent hover:border-slate-200 group">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-xl ${editingPermissionsMember.permissions?.tabs?.includes(tab.id) ?? true ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                              <tab.icon size={16} />
+                            </div>
+                            <span className="text-xs font-bold text-slate-700 tracking-tight">{tab.label}</span>
+                          </div>
+                          <input 
+                            type="checkbox"
+                            checked={editingPermissionsMember.permissions?.tabs?.includes(tab.id) ?? true}
+                            onChange={(e) => {
+                              const current = editingPermissionsMember.permissions?.tabs ?? ['dashboard', 'transactions', 'debts', 'payables', 'reports'];
+                              const next = e.target.checked 
+                                ? [...current, tab.id]
+                                : current.filter(v => v !== tab.id);
+                              setEditingPermissionsMember({
+                                ...editingPermissionsMember,
+                                permissions: { ...editingPermissionsMember.permissions, tabs: next }
+                              });
+                            }}
+                            className="w-5 h-5 rounded-lg border-slate-300 text-orange-600 focus:ring-orange-500 transition-all"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Categorias Permitidas</label>
@@ -3402,26 +3524,27 @@ export default function App() {
                       ))}
                     </div>
                   </div>
-
-                  <div className="flex gap-4 pt-4 border-t border-slate-50">
-                    <button 
-                      onClick={() => updateMemberPermissions(editingPermissionsMember.email, editingPermissionsMember.permissions || {
-                        categories: CATEGORIES.map(c => c.value),
-                        fundSources: FUND_SOURCES.map(s => s.value)
-                      })}
-                      className="flex-1 bg-slate-900 hover:bg-slate-800 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-slate-100 transition-all active:scale-95"
-                    >
-                      Salvar Alterações
-                    </button>
-                    <button 
-                      onClick={() => setEditingPermissionsMember(null)}
-                      className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-2xl font-black uppercase text-xs tracking-widest transition-all"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
                 </div>
-              </div>
+
+                <div className="flex gap-4 pt-8 border-t border-slate-50 mt-8">
+                  <button 
+                    onClick={() => updateMemberPermissions(editingPermissionsMember.email, editingPermissionsMember.permissions || {
+                      categories: CATEGORIES.map(c => c.value),
+                      fundSources: FUND_SOURCES.map(s => s.value),
+                      tabs: ['dashboard', 'transactions', 'debts', 'payables', 'reports']
+                    })}
+                    className="flex-1 bg-slate-900 hover:bg-slate-800 text-white py-5 rounded-3xl font-black uppercase text-xs tracking-widest shadow-xl shadow-slate-100 transition-all active:scale-95"
+                  >
+                    Confirmar Acessos
+                  </button>
+                  <button 
+                    onClick={() => setEditingPermissionsMember(null)}
+                    className="px-8 py-5 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-3xl font-black uppercase text-xs tracking-widest transition-all"
+                  >
+                    Sair
+                  </button>
+                </div>
+                </div>
             </motion.div>
           </>
         )}
