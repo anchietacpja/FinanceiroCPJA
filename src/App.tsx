@@ -898,13 +898,13 @@ export default function App() {
                     whileHover={{ scale: 1.05 }}
                     className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-2xl overflow-hidden border border-slate-100 p-2"
                   >
-                    <img src={LOGO_ANCHIETA} alt="School Logo 1" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                    <img src={LOGO_ANCHIETA} alt="School Logo 1" className="w-full h-full object-contain" />
                   </motion.div>
                   <motion.div 
                     whileHover={{ scale: 1.05 }}
                     className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-2xl overflow-hidden border border-slate-100 p-2"
                   >
-                    <img src={LOGO_CPJA} alt="School Logo 2" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                    <img src={LOGO_CPJA} alt="School Logo 2" className="w-full h-full object-contain" />
                   </motion.div>
                 </div>
                 <div className="h-12 w-[1px] bg-white/20"></div>
@@ -1093,8 +1093,8 @@ export default function App() {
                 className="mt-8 flex flex-col md:flex-row items-center justify-between gap-6 px-6"
               >
                 <div className="flex items-center gap-3">
-                  <div className="bg-white rounded-2xl p-2.5 flex items-center justify-center shadow-lg border border-white/20">
-                    <img src={APP_LOGO} className="w-8 h-8 object-contain" alt="Nokite Logo" referrerPolicy="no-referrer" />
+                  <div className="bg-white rounded-2xl p-2.5 flex items-center justify-center shadow-lg border border-slate-100">
+                    <img src={APP_LOGO} className="w-8 h-8 object-contain" alt="Nokite Logo" />
                   </div>
                   <div>
                     <p className="text-[9px] font-black uppercase text-white/40 tracking-[0.3em] leading-none mb-1.5">Arquitetura de Software</p>
@@ -1132,10 +1132,10 @@ export default function App() {
         <div className="p-6 hidden md:flex flex-col gap-4">
            <div className="flex items-center gap-2">
              <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow-sm overflow-hidden border border-slate-100 p-1 hover:scale-110 transition-transform duration-500">
-                <img src={LOGO_ANCHIETA} alt="School Logo" title="Colégio Anchieta" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                <img src={LOGO_ANCHIETA} alt="School Logo" title="Colégio Anchieta" className="w-full h-full object-contain" />
              </div>
              <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow-sm overflow-hidden border border-slate-100 p-1 hover:scale-110 transition-transform duration-500">
-                <img src={LOGO_CPJA} alt="CPJA Logo" title="CPJA" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                <img src={LOGO_CPJA} alt="CPJA Logo" title="CPJA" className="w-full h-full object-contain" />
              </div>
            </div>
            <div>
@@ -1232,7 +1232,7 @@ export default function App() {
           <div className="hidden md:block pt-4 border-t border-slate-100 mt-2 bg-white/50 rounded-t-2xl -mx-4 px-4 pb-2 group/dev">
             <div className="flex flex-col items-center gap-1.5 transition-all duration-500">
                <div className="w-8 h-8 bg-white rounded-lg p-1 border border-slate-200 shadow-sm group-hover/dev:shadow-md transition-all group-hover/dev:scale-105">
-                 <img src={APP_LOGO} className="w-full h-full object-contain" alt="Nokite Logo" referrerPolicy="no-referrer" />
+                 <img src={APP_LOGO} className="w-full h-full object-contain" alt="Nokite Logo" />
                </div>
                <div className="text-center">
                  <p className="text-[6px] font-black text-slate-400 uppercase tracking-[0.5em] mb-0.5 opacity-60 leading-none">Desenvolvido por</p>
