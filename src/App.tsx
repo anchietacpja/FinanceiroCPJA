@@ -882,27 +882,17 @@ export default function App() {
         createdAt: timestamp,
       });
 
-      // 2. Create Outgoing Transaction
+      // 2. Create Transfer Transaction
+      // Note: type 'transfer' correctly handles balance subtraction in fromAccountId 
+      // AND addition in toAccountId in the accountBalances useMemo.
       await addDoc(collection(db, 'transactions'), {
         date: t.date,
-        description: `TRANSFERÊNCIA (SAÍDA): ${t.description}`,
+        description: `TRANSFERÊNCIA: ${t.description}`,
         amount: t.amount,
-        type: 'transfer',
+        type: t.transfer ? 'transfer' : 'expense', // Fallback for safety
         category: 'transferencia',
         accountId: t.fromAccountId,
         toAccountId: t.toAccountId,
-        userId: currentTenantId,
-        createdAt: serverTimestamp(),
-      });
-
-      // 3. Create Incoming Transaction
-      await addDoc(collection(db, 'transactions'), {
-        date: t.date,
-        description: `TRANSFERÊNCIA (ENTRADA): ${t.description}`,
-        amount: t.amount,
-        type: 'income',
-        category: 'transferencia',
-        accountId: t.toAccountId,
         userId: currentTenantId,
         createdAt: serverTimestamp(),
       });
@@ -1009,7 +999,6 @@ export default function App() {
             src="https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=2070&auto=format&fit=crop" 
             alt="School Background"
             className="w-full h-full object-cover opacity-30 grayscale"
-            referrerPolicy="no-referrer"
           />
           <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-900/90 to-orange-900/40"></div>
           {/* Subtle Grid Pattern Overlay */}
@@ -1026,7 +1015,7 @@ export default function App() {
               {/* Creator Highlight Box */}
               <div className="bg-slate-800/80 backdrop-blur-xl border border-white/10 p-6 rounded-[2rem] shadow-2xl flex items-center gap-5 group hover:bg-slate-800 transition-all">
                 <div className="w-14 h-14 bg-white rounded-2xl p-2.5 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                  <img src={APP_LOGO} className="w-full h-full object-contain" alt="Creator Logo" referrerPolicy="no-referrer" />
+                  <img src={APP_LOGO} className="w-full h-full object-contain" alt="Creator Logo" />
                 </div>
                 <div>
                   <p className="text-[10px] font-black uppercase text-orange-500 tracking-[0.4em] leading-none mb-1.5">Plataforma</p>
@@ -1040,13 +1029,13 @@ export default function App() {
                     whileHover={{ scale: 1.05 }}
                     className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-2xl overflow-hidden border border-slate-100 p-2"
                   >
-                    <img src={LOGO_ANCHIETA} alt="School Logo 1" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                    <img src={LOGO_ANCHIETA} alt="School Logo 1" className="w-full h-full object-contain" />
                   </motion.div>
                   <motion.div 
                     whileHover={{ scale: 1.05 }}
                     className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-2xl overflow-hidden border border-slate-100 p-2"
                   >
-                    <img src={LOGO_CPJA} alt="School Logo 2" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                    <img src={LOGO_CPJA} alt="School Logo 2" className="w-full h-full object-contain" />
                   </motion.div>
                 </div>
                 <div className="h-12 w-[1px] bg-white/20"></div>
@@ -1236,7 +1225,7 @@ export default function App() {
               >
                 <div className="flex items-center gap-3">
                   <div className="bg-white rounded-2xl p-2.5 flex items-center justify-center shadow-lg border border-slate-100">
-                    <img src={APP_LOGO} className="w-8 h-8 object-contain" alt="Nokite Logo" referrerPolicy="no-referrer" />
+                    <img src={APP_LOGO} className="w-8 h-8 object-contain" alt="Nokite Logo" />
                   </div>
                   <div>
                     <p className="text-[9px] font-black uppercase text-white/40 tracking-[0.3em] leading-none mb-1.5">Arquitetura de Software</p>
@@ -1277,10 +1266,10 @@ export default function App() {
            <div className="flex items-center gap-3">
              <div className="flex -space-x-2">
                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-md overflow-hidden border border-slate-100 p-1 hover:z-10 transition-transform hover:scale-110">
-                  <img src={LOGO_ANCHIETA} alt="School Logo" title="Colégio Anchieta" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                  <img src={LOGO_ANCHIETA} alt="School Logo" title="Colégio Anchieta" className="w-full h-full object-contain" />
                </div>
                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-md overflow-hidden border border-slate-100 p-1 hover:z-10 transition-transform hover:scale-110">
-                  <img src={LOGO_CPJA} alt="CPJA Logo" title="CPJA" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+                  <img src={LOGO_CPJA} alt="CPJA Logo" title="CPJA" className="w-full h-full object-contain" />
                </div>
              </div>
              <div>
@@ -1371,7 +1360,7 @@ export default function App() {
 
         <div className="hidden md:block p-4 border-t border-slate-100 mt-auto">
           <div className="flex items-center gap-3 mb-4 px-2 hidden md:flex">
-             <img src={user.photoURL || ''} alt="" className="w-8 h-8 rounded-lg border-2 border-white shadow-sm" referrerPolicy="no-referrer" />
+             <img src={user.photoURL || ''} alt="" className="w-8 h-8 rounded-lg border-2 border-white shadow-sm" />
              <div className="overflow-hidden">
                <p className="text-[10px] font-bold text-slate-800 truncate leading-none mb-0.5">{user.displayName}</p>
                <p className="text-[9px] text-slate-400 font-medium truncate leading-none">{user.email}</p>
@@ -1388,7 +1377,7 @@ export default function App() {
           <div className="hidden md:block pt-4 border-t border-slate-100 mt-2 bg-white/50 rounded-t-2xl -mx-4 px-4 pb-2 group/dev">
             <div className="flex flex-col items-center gap-1.5 transition-all duration-500">
                <div className="w-8 h-8 bg-white rounded-lg p-1 border border-slate-200 shadow-sm group-hover/dev:shadow-md transition-all group-hover/dev:scale-105">
-                 <img src={APP_LOGO} className="w-full h-full object-contain" alt="Nokite Logo" referrerPolicy="no-referrer" />
+                 <img src={APP_LOGO} className="w-full h-full object-contain" alt="Nokite Logo" />
                </div>
                <div className="text-center">
                  <p className="text-[6px] font-black text-slate-400 uppercase tracking-[0.5em] mb-0.5 opacity-60 leading-none">Desenvolvido por</p>
@@ -1401,110 +1390,101 @@ export default function App() {
 
       <main className="pb-40 md:pb-10 md:ml-64 p-4 md:p-10 relative z-10 min-h-screen flex flex-col">
         <div className="flex-1">
-        {activeTab === 'dashboard' && (
-          <div className="relative mb-12">
-            {/* Decorative background elements */}
-            <div className="absolute -top-24 -right-24 w-96 h-96 bg-orange-500/5 rounded-full blur-3xl pointer-events-none"></div>
-            <div className="absolute -bottom-12 -left-12 w-64 h-64 bg-slate-900/5 rounded-full blur-2xl pointer-events-none"></div>
+        {activeTab === 'dashboard' ? (
+          <div className="space-y-12">
+            {/* Bons Negócios Greeting Section */}
+            <div className="relative mb-12">
+              <div className="absolute -top-24 -right-24 w-96 h-96 bg-orange-500/5 rounded-full blur-3xl pointer-events-none"></div>
+              <div className="absolute -bottom-12 -left-12 w-64 h-64 bg-slate-900/5 rounded-full blur-2xl pointer-events-none"></div>
 
-            <div className="relative flex flex-col xl:flex-row xl:items-center justify-between gap-8 mb-12">
-              <div className="flex-1 space-y-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="px-2 py-0.5 bg-orange-100 text-orange-600 text-[9px] font-black uppercase tracking-widest rounded-full leading-none">
-                    Financeiro Ativo
-                  </span>
-                  <div className="w-1 h-1 bg-slate-300 rounded-full"></div>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">
-                    {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}
-                  </span>
-                </div>
-                
-                <h1 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter leading-none">
-                  Bons negócios, <span className="text-orange-500">{user.displayName?.split(' ')[0]}!</span>
-                </h1>
-
-                <div className="flex items-center gap-3">
-                   <div className="w-10 h-10 rounded-xl bg-orange-500 flex items-center justify-center text-white shadow-lg shadow-orange-200">
-                      <GraduationCap size={20} />
-                   </div>
-                   <p className="text-slate-500 font-medium text-lg leading-tight">
-                    Gestão Integrada: <span className="font-black text-slate-900 italic">Grupo Colégio Anchieta CPJA</span>
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-                <div className="bg-white/80 backdrop-blur-md border border-slate-200 p-1 rounded-2xl shadow-sm flex">
-                  {[
-                    { id: 'thisMonth', label: 'Mês Atual' },
-                    { id: 'lastMonth', label: 'Anterior' },
-                    { id: 'all', label: 'Tudo' }
-                  ].map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => setPeriodFilter(p.id as any)}
-                      className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                        periodFilter === p.id 
-                          ? 'bg-slate-900 text-white shadow-lg shadow-slate-200 translate-y-[-1px]' 
-                          : 'text-slate-400 hover:text-slate-900 hover:bg-slate-50'
-                      }`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="bg-white border-2 border-slate-900 rounded-2xl px-8 py-4 shadow-xl shadow-slate-100 relative overflow-hidden group min-w-[240px]">
-                  <div className="absolute top-0 right-0 p-2 opacity-5">
-                    <TrendingUp size={48} />
-                  </div>
-                  <span className="text-[9px] uppercase tracking-[0.25em] text-slate-400 block mb-0.5 font-black leading-none italic">Patrimônio Global</span>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-sm font-bold text-slate-400">R$</span>
-                    <span className="text-3xl font-mono font-black text-slate-900 tracking-tighter tabular-nums leading-none">
-                      {((Object.values(balances) as number[]).reduce((a, b) => a + b, 0) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              <div className="relative flex flex-col xl:flex-row xl:items-center justify-between gap-8 mb-12">
+                <div className="flex-1 space-y-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="px-2 py-0.5 bg-orange-100 text-orange-600 text-[9px] font-black uppercase tracking-widest rounded-full leading-none">
+                      Financeiro Ativo
+                    </span>
+                    <div className="w-1 h-1 bg-slate-300 rounded-full"></div>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none">
+                      {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}
                     </span>
                   </div>
+                  
+                  <h1 className="text-4xl md:text-6xl font-black text-slate-900 tracking-tighter leading-none">
+                    Bons negócios, <span className="text-orange-500">{user.displayName?.split(' ')[0]}!</span>
+                  </h1>
+
+                  <div className="flex items-center gap-3">
+                     <div className="w-10 h-10 rounded-xl bg-orange-500 flex items-center justify-center text-white shadow-lg shadow-orange-200">
+                        <GraduationCap size={20} />
+                     </div>
+                     <p className="text-slate-500 font-medium text-lg leading-tight">
+                      Gestão Integrada: <span className="font-black text-slate-900 italic">{SCHOOL_NAME}</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+                  <div className="bg-white/80 backdrop-blur-md border border-slate-200 p-1 rounded-2xl shadow-sm flex">
+                    {[
+                      { id: 'thisMonth', label: 'Mês Atual' },
+                      { id: 'lastMonth', label: 'Anterior' },
+                      { id: 'all', label: 'Tudo' }
+                    ].map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => setPeriodFilter(p.id as any)}
+                        className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                          periodFilter === p.id 
+                            ? 'bg-slate-900 text-white shadow-lg shadow-slate-200 translate-y-[-1px]' 
+                            : 'text-slate-400 hover:text-slate-900 hover:bg-slate-50'
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="bg-white border-2 border-slate-900 rounded-2xl px-8 py-4 shadow-xl shadow-slate-100 relative overflow-hidden group min-w-[240px]">
+                    <div className="absolute top-0 right-0 p-2 opacity-5">
+                      <TrendingUp size={48} />
+                    </div>
+                    <span className="text-[9px] uppercase tracking-[0.25em] text-slate-400 block mb-0.5 font-black leading-none italic">Patrimônio Global</span>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-sm font-bold text-slate-400">R$</span>
+                      <span className="text-3xl font-mono font-black text-slate-900 tracking-tighter tabular-nums leading-none">
+                        {((Object.values(balances) as number[]).reduce((a, b) => a + b, 0) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* School Hero Banner */}
-            <div className="relative w-full h-48 md:h-64 rounded-[40px] overflow-hidden mb-12 shadow-2xl group">
-               <img 
-                 src="https://images.unsplash.com/photo-1544717297-fa157a92af0c?q=80&w=2070&auto=format&fit=crop" 
-                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000"
-                 alt="Students"
-                 referrerPolicy="no-referrer"
-               />
-               <div className="absolute inset-0 bg-gradient-to-r from-slate-900/80 via-slate-900/40 to-transparent flex items-center px-10">
-                  <div className="max-w-md space-y-4">
-                    <h3 className="text-white text-3xl font-black italic tracking-tighter leading-tight uppercase">
-                      Educando para o<br/>
-                      <span className="text-orange-500 uppercase not-italic">Futuro Financeiro</span>
-                    </h3>
-                    <p className="text-white/60 text-xs font-bold uppercase tracking-widest leading-relaxed">
-                      Transformando a gestão escolar com inteligência e transparência.
-                    </p>
-                    <div className="flex gap-4 pt-2">
-                       <div className="flex items-center gap-2 text-white/40 text-[10px] font-black uppercase">
-                          <Users size={14} /> 1.2k Alunos
-                       </div>
-                       <div className="flex items-center gap-2 text-white/40 text-[10px] font-black uppercase">
-                          <School size={14} /> 3 Unidades
-                       </div>
-                    </div>
-                  </div>
-               </div>
-               <div className="absolute top-8 right-8">
-                  <div className="bg-white/10 backdrop-blur-md p-4 rounded-3xl border border-white/20">
-                     <BookOpen className="text-white/40" size={32} />
-                  </div>
-               </div>
+            {/* Visual Hero Section */}
+            <div className="relative h-48 md:h-64 rounded-[2rem] overflow-hidden shadow-2xl group border-4 border-white">
+                <img 
+                  src="https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&q=80&w=2000" 
+                  alt="Gestão Financeira"
+                  className="w-full h-full object-cover brightness-75 group-hover:scale-105 transition-transform duration-700"
+                />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/20 to-transparent flex flex-col justify-end p-8 md:p-12">
+                <div className="flex items-center gap-4 mb-2">
+                   <div className="w-1.5 h-6 bg-blue-500 rounded-full" />
+                   <p className="text-[10px] md:text-xs font-black text-blue-400 uppercase tracking-[0.4em]">Visão Geral de Performance</p>
+                </div>
+                <h2 className="text-2xl md:text-4xl lg:text-5xl font-black text-white uppercase tracking-tighter leading-none mb-2">
+                  Controle <span className="text-blue-500">Total</span> de Ativos
+                </h2>
+                <div className="flex items-center gap-6 text-white/60 text-[10px] md:text-xs font-black uppercase tracking-widest bg-white/5 backdrop-blur-md w-max px-4 py-2 rounded-lg border border-white/10">
+                   <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"/> Em Tempo Real</span>
+                   <span className="hidden md:inline">• Segurança Bancária</span>
+                   <span className="hidden md:inline">• Inteligência em Dados</span>
+                </div>
+              </div>
             </div>
-            
-            {/* Quick Action Bar */}
-            <div className="flex flex-wrap gap-3 mt-8">
+
+            {/* Quick Action Bar (Consolidated) */}
+            <div className="flex flex-wrap gap-3">
               {userRole === 'owner' && (
                 <>
                   <button 
@@ -1538,227 +1518,6 @@ export default function App() {
                   </button>
                 </>
               )}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'accounts' && (
-          <div className="space-y-6">
-            <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-              <div>
-                <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase italic">Contas Financeiras</h2>
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Gestão de silos e separação de capital</p>
-              </div>
-              {userRole === 'owner' && (
-                <button 
-                  onClick={() => {
-                    setEditingAccount(null);
-                    setShowAccountModal(true);
-                  }}
-                  className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-orange-100 flex items-center gap-2 transition-all active:scale-95"
-                >
-                  <Plus size={18} />
-                  Nova Conta
-                </button>
-              )}
-            </header>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {accounts.map(acc => (
-                <motion.div 
-                  key={acc.id}
-                  layoutId={`acc-${acc.id}`}
-                  className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-100 relative overflow-hidden group"
-                >
-                  <div className={`absolute top-0 left-0 w-full h-2 ${acc.color || 'bg-slate-200'}`} />
-                  
-                  <div className="flex justify-between items-start mb-6">
-                    <div className="p-3 bg-slate-50 rounded-xl text-slate-400">
-                      <Wallet size={24} />
-                    </div>
-                    {userRole === 'owner' && (
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => {
-                            setEditingAccount(acc);
-                            setShowAccountModal(true);
-                          }}
-                          className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
-                        >
-                          <Pencil size={18} />
-                        </button>
-                        <button 
-                          onClick={() => deleteAccount(acc.id)}
-                          className="p-2 text-slate-400 hover:text-red-600 transition-colors"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight mb-1">{acc.name}</h3>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-6">Saldo Atual</p>
-                    <p className="text-3xl font-black font-mono tracking-tighter text-slate-900 leading-none">
-                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(balances[acc.id] || 0)}
-                    </p>
-                  </div>
-
-                  <div className="mt-8 pt-6 border-t border-slate-50 flex items-center justify-between">
-                    <div className="flex flex-col">
-                       <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1">Status</span>
-                       <span className="text-[10px] font-bold text-green-500 uppercase tracking-tighter leading-none">Ativa</span>
-                    </div>
-                    <div className="text-right">
-                       <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1">Última Ref.</span>
-                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none">{new Date(acc.createdAt).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-
-            {accounts.length === 0 && (
-              <div className="bg-slate-50 rounded-[3rem] p-20 text-center border-2 border-dashed border-slate-200">
-                <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm">
-                  <Wallet size={32} className="text-slate-200" />
-                </div>
-                <h3 className="text-xl font-black text-slate-400 uppercase tracking-widest mb-2">Nenhuma conta ativa</h3>
-                <p className="text-sm text-slate-300 max-w-xs mx-auto font-medium">Configure suas contas para começar a separar o dinheiro da empresa, pessoal e outras áreas.</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'transactions' && (
-          <div className="space-y-12">
-              <div className="relative h-40 md:h-56 rounded-[2rem] overflow-hidden shadow-2xl group border-4 border-white mb-8">
-                <img 
-                  src="https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&q=80&w=1200" 
-                  alt="Extrato Financeiro"
-                  className="w-full h-full object-cover brightness-50 group-hover:scale-105 transition-transform duration-700"
-                  referrerPolicy="no-referrer"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/40 to-transparent flex flex-col justify-end p-8 md:p-10">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-1 h-4 bg-emerald-500 rounded-full" />
-                    <p className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.4em]">Auditoria de Fluxo</p>
-                  </div>
-                  <h2 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tighter leading-none italic">
-                    Livro de <span className="text-emerald-500">Registros</span>
-                  </h2>
-                </div>
-              </div>
-
-            <header className={`flex flex-col xl:flex-row xl:items-end justify-between gap-6`}>
-              <div className="flex items-center gap-6">
-                <div className="hidden md:flex w-20 h-20 bg-white border-2 border-slate-900 rounded-3xl items-center justify-center p-0 overflow-hidden shadow-xl relative">
-                   <img 
-                      src="https://images.unsplash.com/photo-1544377193-33dcf4d68fb5?auto=format&fit=crop&q=80&w=400" 
-                      alt="Extrato"
-                      className="w-full h-full object-cover opacity-90"
-                      referrerPolicy="no-referrer"
-                   />
-                   <div className="absolute inset-0 bg-slate-900/10" />
-                   <History className="absolute text-slate-900 drop-shadow-lg" size={28} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Fluxo Contínuo Ativo</span>
-                  </div>
-                  <h1 className="text-3xl font-black text-slate-900 tracking-tighter mb-1 uppercase italic">Extrato de Auditoria</h1>
-                  <p className="text-slate-500 font-medium font-serif">Histórico imutável de movimentações financeiras do tenant.</p>
-                </div>
-              </div>
-              
-              <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4">
-                <div className="bg-white border-2 border-slate-900 p-1 rounded-2xl flex shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
-                  {[
-                    { id: 'thisMonth', label: 'Mês Atual' },
-                    { id: 'lastMonth', label: 'Anterior' },
-                    { id: 'all', label: 'Tudo' }
-                  ].map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => setPeriodFilter(p.id as any)}
-                      className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${periodFilter === p.id ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-                
-              <div className="bg-white border border-slate-200 px-6 py-3 rounded-xl shadow-sm flex flex-col justify-center">
-                <span className="text-[8px] uppercase tracking-[0.2em] text-slate-400 block mb-0.5 font-black leading-none">Saldo consolidado</span>
-                <span className="text-lg font-mono font-bold text-slate-800 leading-none">
-                  R$ {((Object.values(balances) as number[]).reduce((a, b) => a + b, 0) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-              
-              {userRole === 'owner' && (
-                <div className="flex gap-2">
-                  <button 
-                    onClick={() => setShowImportModal(true)}
-                    className="flex-1 md:flex-none bg-white border border-slate-200 text-slate-600 font-bold py-4 px-6 rounded-xl flex items-center justify-center gap-2 transition-all hover:border-orange-600 hover:text-orange-600 shadow-sm active:scale-95 uppercase text-[10px] tracking-widest"
-                  >
-                    <Upload size={16} />
-                    Importar
-                  </button>
-                  <button 
-                    onClick={() => {
-                      setModalType('expense');
-                      setShowAddModal(true);
-                    }}
-                    className="flex-1 md:flex-none bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 px-8 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl shadow-orange-100 active:scale-95 uppercase text-xs tracking-widest"
-                  >
-                    <Plus size={20} strokeWidth={3} />
-                    Novo
-                  </button>
-                </div>
-              )}
-            </div>
-          </header>
-        </div>
-      )}
-
-        {userRole === 'viewer' && (activeTab === 'dashboard' || activeTab === 'transactions') && (
-          <div className="mb-8 bg-amber-50 border border-amber-100 p-6 rounded-3xl flex items-center gap-4">
-             <div className="w-12 h-12 bg-amber-100 rounded-2xl flex items-center justify-center text-amber-600">
-                <ShieldAlert size={24} />
-             </div>
-             <div>
-                <h4 className="text-sm font-black text-amber-900 uppercase tracking-widest">Acesso de Visualizador</h4>
-                <p className="text-xs text-amber-700 font-medium tracking-tight">Você está no modo leitura. Algumas funções de registro e importação estão bloqueadas para seu perfil.</p>
-             </div>
-          </div>
-        )}
-
-        {activeTab === 'dashboard' ? (
-          <div className="space-y-12">
-            {/* Visual Hero Section */}
-            <div className="relative h-48 md:h-64 rounded-[2rem] overflow-hidden shadow-2xl group border-4 border-white">
-                <img 
-                  src="https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&q=80&w=2000" 
-                  alt="Gestão Financeira"
-                  className="w-full h-full object-cover brightness-75 group-hover:scale-105 transition-transform duration-700"
-                  referrerPolicy="no-referrer"
-                />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/20 to-transparent flex flex-col justify-end p-8 md:p-12">
-                <div className="flex items-center gap-4 mb-2">
-                   <div className="w-1.5 h-6 bg-blue-500 rounded-full" />
-                   <p className="text-[10px] md:text-xs font-black text-blue-400 uppercase tracking-[0.4em]">Visão Geral de Performance</p>
-                </div>
-                <h2 className="text-2xl md:text-4xl lg:text-5xl font-black text-white uppercase tracking-tighter leading-none mb-2">
-                  Controle <span className="text-blue-500">Total</span> de Ativos
-                </h2>
-                <div className="flex items-center gap-6 text-white/60 text-[10px] md:text-xs font-black uppercase tracking-widest bg-white/5 backdrop-blur-md w-max px-4 py-2 rounded-lg border border-white/10">
-                   <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"/> Em Tempo Real</span>
-                   <span className="hidden md:inline">• Segurança Bancária</span>
-                   <span className="hidden md:inline">• Inteligência em Dados</span>
-                </div>
-              </div>
             </div>
 
             {/* Gráfico de Fluxo de Caixa Diário */}
@@ -1830,8 +1589,19 @@ export default function App() {
                 </ResponsiveContainer>
               </div>
             </div>
-            
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {/* Consolidated Total Balance */}
+                <div className="bg-emerald-600 rounded-3xl p-10 text-white shadow-[0_20px_50px_rgba(16,185,129,0.3)] overflow-hidden relative group border-2 border-emerald-500">
+                  <div className="absolute top-0 right-0 p-4 opacity-20">
+                    <Wallet size={80} />
+                  </div>
+                  <p className="text-[11px] font-black uppercase tracking-[0.3em] mb-2 opacity-80 italic">Saldo Consolidado</p>
+                  <p className="text-3xl font-mono font-black tracking-tighter">
+                    R$ {Object.values(balances).reduce((acc, b) => acc + b, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-[10px] mt-4 font-black uppercase opacity-60">Soma de todas as contas</p>
+                </div>
+
                 {/* Receita Acadêmica - Tuition Category */}
                 {(userRole === 'owner' || (userPermissions?.categories?.includes('tuition') ?? true)) && (
                   <div className="bg-orange-500 rounded-3xl p-10 text-white shadow-[0_20px_50px_rgba(249,115,22,0.3)] overflow-hidden relative group border-2 border-orange-400">
@@ -2004,6 +1774,276 @@ export default function App() {
               </div>
             </div>
           </div>
+        ) : activeTab === 'accounts' ? (
+          <div className="space-y-6">
+            <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+              <div>
+                <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase italic">Contas Financeiras</h2>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Gestão de silos e separação de capital</p>
+              </div>
+              {userRole === 'owner' && (
+                <button 
+                  onClick={() => {
+                    setEditingAccount(null);
+                    setShowAccountModal(true);
+                  }}
+                  className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-orange-100 flex items-center gap-2 transition-all active:scale-95"
+                >
+                  <Plus size={18} />
+                  Nova Conta
+                </button>
+              )}
+            </header>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {accounts.map(acc => (
+                <motion.div 
+                  key={acc.id}
+                  layoutId={`acc-${acc.id}`}
+                  className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-100 relative overflow-hidden group"
+                >
+                  <div className={`absolute top-0 left-0 w-full h-2 ${acc.color || 'bg-slate-200'}`} />
+                  
+                  <div className="flex justify-between items-start mb-6">
+                    <div className="p-3 bg-slate-50 rounded-xl text-slate-400">
+                      <Wallet size={24} />
+                    </div>
+                    {userRole === 'owner' && (
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => {
+                            setEditingAccount(acc);
+                            setShowAccountModal(true);
+                          }}
+                          className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
+                        >
+                          <Pencil size={18} />
+                        </button>
+                        <button 
+                          onClick={() => deleteAccount(acc.id)}
+                          className="p-2 text-slate-400 hover:text-red-600 transition-colors"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight mb-1">{acc.name}</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-6">Saldo Atual</p>
+                    <p className="text-3xl font-black font-mono tracking-tighter text-slate-900 leading-none">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(balances[acc.id] || 0)}
+                    </p>
+                  </div>
+
+                  <div className="mt-8 pt-6 border-t border-slate-50 flex items-center justify-between">
+                    <div className="flex flex-col">
+                       <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1">Status</span>
+                       <span className="text-[10px] font-bold text-green-500 uppercase tracking-tighter leading-none">Ativa</span>
+                    </div>
+                    <div className="text-right">
+                       <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1">Última Ref.</span>
+                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none">{new Date(acc.createdAt).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+
+            {accounts.length === 0 && (
+              <div className="bg-slate-50 rounded-[3rem] p-20 text-center border-2 border-dashed border-slate-200">
+                <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm">
+                  <Wallet size={32} className="text-slate-200" />
+                </div>
+                <h3 className="text-xl font-black text-slate-400 uppercase tracking-widest mb-2">Nenhuma conta ativa</h3>
+                <p className="text-sm text-slate-300 max-w-xs mx-auto font-medium">Configure suas contas para começar a separar o dinheiro da empresa, pessoal e outras áreas.</p>
+              </div>
+            )}
+          </div>
+        ) : activeTab === 'transactions' ? (
+          <div className="space-y-12">
+            <header className={`flex flex-col xl:flex-row xl:items-end justify-between gap-6`}>
+              <div className="flex items-center gap-6">
+                <div className="hidden md:flex w-20 h-20 bg-white border-2 border-slate-900 rounded-3xl items-center justify-center p-0 overflow-hidden shadow-xl relative">
+                   <img 
+                      src="https://images.unsplash.com/photo-1544377193-33dcf4d68fb5?auto=format&fit=crop&q=80&w=400" 
+                      alt="Extrato"
+                      className="w-full h-full object-cover opacity-90"
+                   />
+                   <div className="absolute inset-0 bg-slate-900/10" />
+                   <History className="absolute text-slate-900 drop-shadow-lg" size={28} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Fluxo Contínuo Ativo</span>
+                  </div>
+                  <h1 className="text-3xl font-black text-slate-900 tracking-tighter mb-1 uppercase italic">Extrato de Auditoria</h1>
+                  <p className="text-slate-500 font-medium font-serif">Histórico imutável de movimentações financeiras.</p>
+                </div>
+              </div>
+              
+              <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4">
+                <div className="bg-white border-2 border-slate-900 p-1 rounded-2xl flex shadow-[4px_4px_0px_0px_rgba(15,23,42,1)]">
+                  {[
+                    { id: 'thisMonth', label: 'Mês Atual' },
+                    { id: 'lastMonth', label: 'Anterior' },
+                    { id: 'all', label: 'Tudo' }
+                  ].map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => setPeriodFilter(p.id as any)}
+                      className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${periodFilter === p.id ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                
+                <div className="bg-white border border-slate-200 px-6 py-3 rounded-xl shadow-sm flex flex-col justify-center">
+                  <span className="text-[8px] uppercase tracking-[0.2em] text-slate-400 block mb-0.5 font-black leading-none">Saldo consolidado</span>
+                  <span className="text-lg font-mono font-bold text-slate-800 leading-none">
+                    R$ {((Object.values(balances) as number[]).reduce((a, b) => a + b, 0) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                
+                {userRole === 'owner' && (
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setShowImportModal(true)}
+                      className="flex-1 md:flex-none bg-white border border-slate-200 text-slate-600 font-bold py-4 px-6 rounded-xl flex items-center justify-center gap-2 transition-all hover:border-orange-600 hover:text-orange-600 shadow-sm active:scale-95 uppercase text-[10px] tracking-widest"
+                    >
+                      <Upload size={16} />
+                      Importar
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setModalType('expense');
+                        setShowAddModal(true);
+                      }}
+                      className="flex-1 md:flex-none bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 px-8 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl shadow-orange-100 active:scale-95 uppercase text-xs tracking-widest"
+                    >
+                      <Plus size={20} strokeWidth={3} />
+                      Novo
+                    </button>
+                  </div>
+                )}
+              </div>
+            </header>
+
+            <div className="flex flex-col lg:flex-row gap-6 items-stretch lg:items-center justify-between mt-8">
+               <div className="relative flex-grow max-w-2xl group">
+                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                   <Search className="text-slate-300 group-focus-within:text-orange-600 transition-colors" size={20} />
+                 </div>
+                 <input 
+                  type="text" 
+                  placeholder="LOCALIZAR LANÇAMENTO..." 
+                  className="w-full pl-12 pr-6 py-4 bg-white border border-slate-200 rounded-xl outline-none focus:ring-4 ring-orange-50 transition-all text-xs font-bold tracking-widest placeholder:text-slate-300 uppercase"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                 />
+               </div>
+               <div className="flex items-center gap-2 overflow-x-auto pb-2 lg:pb-0 scrollbar-hide">
+                  <button 
+                    onClick={() => setCategoryFilter('all')}
+                    className={`px-5 py-2.5 rounded-lg text-[10px] font-black tracking-[0.15em] transition-all border ${categoryFilter === 'all' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'}`}
+                  >
+                    Geral
+                  </button>
+                  {CATEGORIES.map(c => (
+                    <button 
+                      key={c.value}
+                      onClick={() => setCategoryFilter(c.value)}
+                      className={`px-5 py-2.5 rounded-lg text-[10px] font-black tracking-[0.15em] transition-all border ${categoryFilter === c.value ? 'bg-orange-600 text-white border-orange-600' : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'}`}
+                    >
+                      {c.label.toUpperCase()}
+                    </button>
+                  ))}
+               </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border-2 border-slate-900 shadow-[12px_12px_0px_0px_rgba(15,23,42,1)] overflow-hidden">
+               <div className="overflow-x-auto">
+                 <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-900 border-b border-slate-800">
+                        <th className="px-8 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.3em]">Dossiê de Registro</th>
+                        <th className="px-8 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.3em]">Silo (Fluxo)</th>
+                        <th className="px-8 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.3em]">Origem do Ativo</th>
+                        <th className="px-8 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] text-right">Impacto Nominal</th>
+                        <th className="px-8 py-6 w-24"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {periodFilteredTransactions.map(t => (
+                        <tr key={t.id} className="hover:bg-blue-50/30 transition-colors group">
+                          <td className="px-8 py-6 border-r border-slate-100">
+                            <div className="flex flex-col">
+                              <span className="font-black text-slate-900 text-sm mb-0.5 tracking-tight uppercase italic">{t.description}</span>
+                              <span className="text-[10px] text-slate-400 font-mono font-black border-l-2 border-slate-200 pl-2">{new Date(t.date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+                            </div>
+                          </td>
+                          <td className="px-8 py-6">
+                            <span className={`px-4 py-1.5 rounded-lg text-[10px] font-black text-white uppercase tracking-widest inline-block shadow-sm ${CATEGORIES.find(c => c.value === t.category)?.color}`}>
+                              {CATEGORIES.find(c => c.value === t.category)?.label}
+                            </span>
+                          </td>
+                          <td className="px-8 py-6">
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest bg-slate-50 px-3 py-1 rounded-full w-max border border-slate-100">
+                                {t.type === 'transfer' ? (
+                                  <span className="flex items-center gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-orange-400" />
+                                    {accounts.find(f => f.id === t.accountId)?.name || t.accountId}
+                                    <ArrowRight size={12} className="text-slate-300" />
+                                    {accounts.find(f => f.id === t.toAccountId)?.name || t.toAccountId}
+                                  </span>
+                                ) : (
+                                  <span className="flex items-center gap-2">
+                                    <div className={`w-1.5 h-1.5 rounded-full ${t.type === 'income' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                                    {accounts.find(f => f.id === t.accountId)?.name || t.accountId}
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          </td>
+                          <td className={`px-8 py-6 text-right font-mono font-black text-base ${t.type === 'income' ? 'text-emerald-600' : t.type === 'transfer' ? 'text-orange-600' : 'text-slate-900'}`}>
+                            <div className="flex flex-col items-end">
+                               <span className="text-[9px] uppercase tracking-widest opacity-40 font-sans mb-1">{t.type === 'income' ? 'Entrada' : t.type === 'transfer' ? 'Transferência' : 'Saída'}</span>
+                               <span>{t.type === 'income' ? '+' : t.type === 'transfer' ? '⇄' : '-'} R$ {t.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          </td>
+                          <td className="px-8 py-6">
+                            {userRole === 'owner' && (
+                              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button 
+                                  onClick={() => {
+                                    setEditingTransaction(t);
+                                    setModalType(t.type);
+                                    setShowAddModal(true);
+                                  }}
+                                  className="p-2 text-slate-300 hover:text-orange-600 transition-colors"
+                                >
+                                  <Pencil size={16} />
+                                </button>
+                                <button 
+                                  onClick={() => setConfirmDelete(t.id)}
+                                  className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                 </table>
+               </div>
+            </div>
+          </div>
         ) : activeTab === 'debts' ? (
           <div className="space-y-10">
             {/* Hero Banner for Debts */}
@@ -2012,7 +2052,6 @@ export default function App() {
                   src="https://images.unsplash.com/photo-1554224155-1697414265d7?auto=format&fit=crop&q=80&w=1200" 
                   alt="Gestão de Passivos"
                   className="w-full h-full object-cover brightness-50 group-hover:scale-105 transition-transform duration-700"
-                  referrerPolicy="no-referrer"
                 />
               <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/40 to-transparent flex flex-col justify-end p-8 md:p-10">
                 <div className="flex items-center gap-3 mb-2">
@@ -2134,7 +2173,6 @@ export default function App() {
                        src="https://images.unsplash.com/photo-1579621909532-47578f97b11a?auto=format&fit=crop&q=80&w=400" 
                        alt="Nenhuma dívida" 
                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                       referrerPolicy="no-referrer"
                      />
                   </div>
                   <h4 className="text-xl font-black text-slate-800 uppercase tracking-tighter mb-2 italic">Horizonte Limpo</h4>
@@ -2220,14 +2258,42 @@ export default function App() {
                               return;
                             }
                             
+                            // Seleção de conta simplificada por prompt para não quebrar o fluxo mobile
+                            const accountNames = accounts.map((a, i) => `${i + 1}: ${a.name}`).join('\n');
+                            const accChoice = prompt(`Pagar com qual conta?\n\n${accountNames}\n\nDigite o número:`, '1');
+                            
+                            const accIdx = parseInt(accChoice || '1') - 1;
+                            const selectedAccount = accounts[accIdx];
+                            
+                            if (!selectedAccount) {
+                              alert("Conta não localizada. Pagamento cancelado.");
+                              return;
+                            }
+
                             const reduced = Math.max(0, debt.totalAmount - val);
                             const remaining = debt.remainingInstallments ? Math.max(0, debt.remainingInstallments - 1) : undefined;
                             
-                            await updateDebt(debt.id, { 
-                               totalAmount: reduced,
-                               remainingInstallments: remaining,
-                               status: reduced <= 0 ? 'paid' : 'active'
-                            });
+                            try {
+                              // Criar transação de saída
+                              await addTransaction({
+                                date: new Date().toISOString().split('T')[0],
+                                description: `PARCELA: ${debt.description}`,
+                                amount: val,
+                                type: 'expense',
+                                category: 'folha', // ou 'outros', mas folha/manutencao costuma ser divida
+                                accountId: selectedAccount.id,
+                              });
+
+                              await updateDebt(debt.id, { 
+                                 totalAmount: reduced,
+                                 remainingInstallments: remaining,
+                                 status: reduced <= 0 ? 'paid' : 'active'
+                              });
+                              
+                              addNotification(`Parcela de R$ ${val} paga com ${selectedAccount.name}`, "success");
+                            } catch (error) {
+                              console.error(error);
+                            }
                           }
                         }}
                         className="flex-1 py-4 bg-slate-900 hover:bg-black text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-xl transition-all shadow-xl shadow-slate-200 active:scale-95 flex items-center justify-center gap-2"
@@ -2236,7 +2302,35 @@ export default function App() {
                         Pagar Parcela
                       </button>
                       <button 
-                        onClick={() => setConfirmPayDebt(debt.id)}
+                        onClick={() => {
+                          const confirmPay = window.confirm(`Deseja quitar totalmente esta dívida?\n\nValor: R$ ${debt.totalAmount.toLocaleString('pt-BR')}`);
+                          if (!confirmPay) return;
+
+                          const accountNames = accounts.map((a, i) => `${i + 1}: ${a.name}`).join('\n');
+                          const accChoice = prompt(`Pagar com qual conta?\n\n${accountNames}\n\nDigite o número:`, '1');
+                          const accIdx = parseInt(accChoice || '1') - 1;
+                          const selectedAccount = accounts[accIdx];
+
+                          if (!selectedAccount) {
+                            alert("Conta não localizada. Quitação cancelada.");
+                            return;
+                          }
+
+                          (async () => {
+                            try {
+                              await addTransaction({
+                                date: new Date().toISOString().split('T')[0],
+                                description: `QUITAÇÃO: ${debt.description}`,
+                                amount: debt.totalAmount,
+                                type: 'expense',
+                                category: 'folha',
+                                accountId: selectedAccount.id,
+                              });
+                              await updateDebt(debt.id, { totalAmount: 0, status: 'paid', remainingInstallments: 0 });
+                              addNotification(`Dívida quitada com ${selectedAccount.name}`, "success");
+                            } catch (e) { console.error(e); }
+                          })();
+                        }}
                         className="px-6 py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-100 transition-all flex items-center justify-center"
                         title="Quitar"
                       >
@@ -2277,7 +2371,6 @@ export default function App() {
                        src="https://images.unsplash.com/photo-1543269865-cbf427effbad?auto=format&fit=crop&q=80&w=400" 
                        alt="Sem contas" 
                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                       referrerPolicy="no-referrer"
                      />
                   </div>
                   <h4 className="text-xl font-black text-slate-800 uppercase tracking-tighter mb-2 italic">Agenda Livre</h4>
@@ -2644,245 +2737,20 @@ export default function App() {
                      <p className="text-xs text-orange-700 font-medium leading-relaxed max-w-2xl">
                        Usuários com cargo de **Visualizador** possuem acesso restrito. 
                        Você pode definir exatamente quais **Categorias** e **Contas Financeiras** cada colaborador pode ver clicando no ícone de escudo <ShieldCheck size={12} className="inline" />.
-                       Isso garante que cada pessoa veja apenas o que é relevante para sua função, evitando mistura de informações sensíveis.
-                     </p>
-                  </div>
-               </div>
-            </div>
+                        Isso garante que cada pessoa veja apenas o que é relevante para sua função, evitando mistura de informações sensíveis.
+                      </p>
+                   </div>
+                </div>
+             </div>
           </div>
         ) : (
-          <>
-            {/* Account Details (Moved from Dashboard) */}
-            <div className="space-y-6 mb-10">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h3 className="text-lg font-black text-slate-900 uppercase tracking-tighter italic leading-none">Contas & Patrimônio</h3>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Conferência de saldos por origem de recurso</p>
-                </div>
-                <div className="flex flex-wrap gap-4">
-                  {[
-                    { label: 'Escola', color: '#f97316' },
-                    { label: 'Cantina', color: '#10b981' },
-                    { label: 'Pessoal', color: '#fbbf24' }
-                  ].map(item => (
-                    <div key={item.label} className="flex items-center gap-2 text-[8px] font-black uppercase tracking-widest text-slate-400">
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }}></div> {item.label}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {accounts.map((acc, idx) => {
-                  return (
-                    <motion.div 
-                      key={acc.id} 
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: idx * 0.05 }}
-                      className="bg-white border border-slate-100 p-5 rounded-[24px] shadow-sm hover:shadow-xl transition-all group border-b-4" 
-                      style={{ borderBottomColor: acc.color || '#e2e8f0' }}
-                    >
-                      <div className="flex justify-between items-start mb-3">
-                        <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-slate-900 group-hover:text-white transition-colors uppercase text-[9px] font-black">
-                          {acc.name.substring(0, 2)}
-                        </div>
-                        <span className="text-[9px] font-mono text-slate-100 font-bold">ACC-{idx+1}</span>
-                      </div>
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.15em] mb-1 truncate">{acc.name}</p>
-                      <p className="text-xl font-mono font-bold text-slate-900 leading-none tabular-nums">
-                        R$ {(balances[acc.id] || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </p>
-                    </motion.div>
-                  );
-                })}
-              </div>
+          <div className="flex flex-col items-center justify-center py-20 bg-slate-50 rounded-[3rem] border-4 border-dashed border-slate-100">
+            <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center shadow-sm mb-6">
+              <LayoutDashboard size={40} className="text-slate-200" />
             </div>
-
-            {/* Global Action Buttons for Transactions view */}
-            {userRole === 'owner' && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                <button 
-                  onClick={() => setShowImportModal(true)}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white p-6 rounded-3xl flex items-center justify-between group shadow-xl shadow-indigo-100 transition-all active:scale-95"
-                >
-                  <div className="text-left">
-                    <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">Importação Digital</p>
-                    <h4 className="font-bold text-lg leading-tight uppercase italic">Enviar Extrato (IA)</h4>
-                  </div>
-                  <div className="w-12 h-12 bg-indigo-500 rounded-2xl flex items-center justify-center group-hover:rotate-12 transition-transform">
-                    <Upload size={24} />
-                  </div>
-                </button>
-
-                <button 
-                  onClick={() => {
-                    setModalType('expense');
-                    setShowAddModal(true);
-                  }}
-                  className="bg-slate-900 hover:bg-black text-white p-6 rounded-3xl flex items-center justify-between group shadow-xl shadow-slate-100 transition-all active:scale-95"
-                >
-                  <div className="text-left">
-                    <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">Registro Manual</p>
-                    <h4 className="font-bold text-lg leading-tight uppercase italic">Lançar Saída</h4>
-                  </div>
-                  <div className="w-12 h-12 bg-slate-800 rounded-2xl flex items-center justify-center group-hover:-translate-y-1 transition-transform">
-                    <Plus size={24} />
-                  </div>
-                </button>
-
-                <button 
-                  onClick={() => {
-                    setModalType('income');
-                    setShowAddModal(true);
-                  }}
-                  className="bg-orange-500 hover:bg-orange-600 text-white p-6 rounded-3xl flex items-center justify-between group shadow-xl shadow-orange-50 transition-all active:scale-95"
-                >
-                  <div className="text-left">
-                    <p className="text-[10px] font-black uppercase tracking-widest opacity-60 mb-1">Registro Manual</p>
-                    <h4 className="font-bold text-lg leading-tight uppercase italic">Lançar Entrada</h4>
-                  </div>
-                  <div className="w-12 h-12 bg-orange-400 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <ArrowUpRight size={24} />
-                  </div>
-                </button>
-              </div>
-            )}
-
-            <div className="flex flex-col lg:flex-row gap-6 items-stretch lg:items-center justify-between">
-               <div className="relative flex-grow max-w-2xl group">
-                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                   <Search className="text-slate-300 group-focus-within:text-orange-600 transition-colors" size={20} />
-                 </div>
-                 <input 
-                  type="text" 
-                  placeholder="LOCALIZAR LANÇAMENTO..." 
-                  className="w-full pl-12 pr-6 py-4 bg-white border border-slate-200 rounded-xl outline-none focus:ring-4 ring-orange-50 transition-all text-xs font-bold tracking-widest placeholder:text-slate-300 uppercase"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                 />
-               </div>
-               <div className="flex items-center gap-2 overflow-x-auto pb-2 lg:pb-0 scrollbar-hide">
-                  <button 
-                    onClick={() => setCategoryFilter('all')}
-                    className={`px-5 py-2.5 rounded-lg text-[10px] font-black tracking-[0.15em] transition-all border ${categoryFilter === 'all' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'}`}
-                  >
-                    Geral
-                  </button>
-                  {CATEGORIES.map(c => (
-                    <button 
-                      key={c.value}
-                      onClick={() => setCategoryFilter(c.value)}
-                      className={`px-5 py-2.5 rounded-lg text-[10px] font-black tracking-[0.15em] transition-all border ${categoryFilter === c.value ? 'bg-orange-600 text-white border-orange-600' : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-50'}`}
-                    >
-                      {c.label.toUpperCase()}
-                    </button>
-                  ))}
-               </div>
-            </div>
-
-            <div className="bg-white rounded-2xl border-2 border-slate-900 shadow-[12px_12px_0px_0px_rgba(15,23,42,1)] overflow-hidden">
-               <div className="overflow-x-auto">
-                 <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-900 border-b border-slate-800">
-                        <th className="px-8 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.3em]">Dossiê de Registro</th>
-                        <th className="px-8 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.3em]">Silo (Fluxo)</th>
-                        <th className="px-8 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.3em]">Origem do Ativo</th>
-                        <th className="px-8 py-6 text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] text-right">Impacto Nominal</th>
-                        <th className="px-8 py-6 w-24"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {periodFilteredTransactions.map(t => (
-                        <tr key={t.id} className="hover:bg-blue-50/30 transition-colors group">
-                          <td className="px-8 py-6 border-r border-slate-100">
-                            <div className="flex flex-col">
-                              <span className="font-black text-slate-900 text-sm mb-0.5 tracking-tight uppercase italic">{t.description}</span>
-                              <span className="text-[10px] text-slate-400 font-mono font-black border-l-2 border-slate-200 pl-2">{new Date(t.date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
-                            </div>
-                          </td>
-                          <td className="px-8 py-6">
-                            <span className={`px-4 py-1.5 rounded-lg text-[10px] font-black text-white uppercase tracking-widest inline-block shadow-sm ${CATEGORIES.find(c => c.value === t.category)?.color}`}>
-                              {CATEGORIES.find(c => c.value === t.category)?.label}
-                            </span>
-                          </td>
-                          <td className="px-8 py-6">
-                            <div className="flex flex-col">
-                              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest bg-slate-50 px-3 py-1 rounded-full w-max border border-slate-100">
-                                {t.type === 'transfer' ? (
-                                  <span className="flex items-center gap-2">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-                                    {accounts.find(f => f.id === t.accountId)?.name || t.accountId}
-                                    <ArrowRight size={12} className="text-slate-300" />
-                                    {accounts.find(f => f.id === t.toAccountId)?.name || t.toAccountId}
-                                  </span>
-                                ) : (
-                                  <span className="flex items-center gap-2">
-                                    <div className={`w-1.5 h-1.5 rounded-full ${t.type === 'income' ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                                    {accounts.find(f => f.id === t.accountId)?.name || t.accountId}
-                                  </span>
-                                )}
-                              </span>
-                            </div>
-                          </td>
-                          <td className={`px-8 py-6 text-right font-mono font-black text-base ${t.type === 'income' ? 'text-emerald-600' : t.type === 'transfer' ? 'text-orange-600' : 'text-slate-900'}`}>
-                            <div className="flex flex-col items-end">
-                               <span className="text-[9px] uppercase tracking-widest opacity-40 font-sans mb-1">{t.type === 'income' ? 'Entrada' : t.type === 'transfer' ? 'Transferência' : 'Saída'}</span>
-                               <span>{t.type === 'income' ? '+' : t.type === 'transfer' ? '⇄' : '-'} R$ {t.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                            </div>
-                          </td>
-                          <td className="px-8 py-6">
-                            {userRole === 'owner' && (
-                              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button 
-                                  onClick={() => {
-                                    setEditingTransaction(t);
-                                    setModalType(t.type);
-                                    setShowAddModal(true);
-                                  }}
-                                  className="p-2 text-slate-300 hover:text-orange-600 transition-colors"
-                                >
-                                  <Pencil size={16} />
-                                </button>
-                                <button 
-                                  onClick={() => setConfirmDelete(t.id)}
-                                  className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                      {filteredTransactions.length === 0 && (
-                        <tr>
-                          <td colSpan={5} className="px-8 py-32 text-center">
-                            <div className="flex flex-col items-center gap-6 max-w-md mx-auto">
-                               <div className="w-56 h-56 bg-slate-50 rounded-[3rem] p-0 flex items-center justify-center text-slate-200 border-4 border-dashed border-slate-200 overflow-hidden group">
-                                  <img 
-                                    src="https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?auto=format&fit=crop&q=80&w=400" 
-                                    alt="Nenhum dado" 
-                                    className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-700"
-                                    referrerPolicy="no-referrer"
-                                  />
-                               </div>
-                               <div>
-                                 <h4 className="text-xl font-black text-slate-800 uppercase tracking-tighter italic mb-1">Nada Consta</h4>
-                                 <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em] leading-relaxed">
-                                   Não identificamos movimentações financeiras para os filtros aplicados neste período.
-                                 </p>
-                               </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                 </table>
-               </div>
-            </div>
-          </>
+            <h3 className="text-xl font-black text-slate-400 uppercase tracking-widest italic">Página em Construção</h3>
+            <p className="text-[10px] text-slate-300 font-bold uppercase tracking-[0.2em] mt-2">Esta funcionalidade está sendo refinada para você.</p>
+          </div>
         )}
         </div>
         {/* Scroll Headroom */}
