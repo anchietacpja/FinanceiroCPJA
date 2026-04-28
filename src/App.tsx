@@ -998,6 +998,7 @@ export default function App() {
           <img 
             src="https://images.unsplash.com/photo-1523050854058-8df90110c9f1?q=80&w=2070&auto=format&fit=crop" 
             alt="School Background"
+            referrerPolicy="no-referrer"
             className="w-full h-full object-cover opacity-30 grayscale"
           />
           <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-900/90 to-orange-900/40"></div>
@@ -1465,6 +1466,7 @@ export default function App() {
                 <img 
                   src="https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&q=80&w=2000" 
                   alt="Gestão Financeira"
+                  referrerPolicy="no-referrer"
                   className="w-full h-full object-cover brightness-75 group-hover:scale-105 transition-transform duration-700"
                 />
               <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/20 to-transparent flex flex-col justify-end p-8 md:p-12">
@@ -1869,6 +1871,7 @@ export default function App() {
                    <img 
                       src="https://images.unsplash.com/photo-1544377193-33dcf4d68fb5?auto=format&fit=crop&q=80&w=400" 
                       alt="Extrato"
+                      referrerPolicy="no-referrer"
                       className="w-full h-full object-cover opacity-90"
                    />
                    <div className="absolute inset-0 bg-slate-900/10" />
@@ -1977,8 +1980,19 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                      {periodFilteredTransactions.map(t => (
-                        <tr key={t.id} className="hover:bg-blue-50/30 transition-colors group">
+                      {periodFilteredTransactions.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-8 py-20 text-center">
+                            <div className="flex flex-col items-center">
+                              <History size={48} className="text-slate-100 mb-4" />
+                              <p className="text-sm font-black text-slate-300 uppercase tracking-widest italic">Nenhuma movimentação localizada</p>
+                              <p className="text-[10px] text-slate-200 font-bold uppercase tracking-widest mt-2">Ajuste os filtros ou adicione um novo registro.</p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        periodFilteredTransactions.map(t => (
+                          <tr key={t.id} className="hover:bg-blue-50/30 transition-colors group">
                           <td className="px-8 py-6 border-r border-slate-100">
                             <div className="flex flex-col">
                               <span className="font-black text-slate-900 text-sm mb-0.5 tracking-tight uppercase italic">{t.description}</span>
@@ -2038,7 +2052,7 @@ export default function App() {
                             )}
                           </td>
                         </tr>
-                      ))}
+                      )))}
                     </tbody>
                  </table>
                </div>
@@ -2051,6 +2065,7 @@ export default function App() {
                 <img 
                   src="https://images.unsplash.com/photo-1554224155-1697414265d7?auto=format&fit=crop&q=80&w=1200" 
                   alt="Gestão de Passivos"
+                  referrerPolicy="no-referrer"
                   className="w-full h-full object-cover brightness-50 group-hover:scale-105 transition-transform duration-700"
                 />
               <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/40 to-transparent flex flex-col justify-end p-8 md:p-10">
@@ -2172,6 +2187,7 @@ export default function App() {
                      <img 
                        src="https://images.unsplash.com/photo-1579621909532-47578f97b11a?auto=format&fit=crop&q=80&w=400" 
                        alt="Nenhuma dívida" 
+                       referrerPolicy="no-referrer"
                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                      />
                   </div>
@@ -2179,7 +2195,7 @@ export default function App() {
                   <p className="text-slate-400 font-bold uppercase text-[10px] tracking-[0.2em] max-w-xs mx-auto">Sua empresa não possui compromissos financeiros de longo prazo registrados no momento.</p>
                 </div>
               ) : (
-                debts.sort((a,b) => b.totalAmount - a.totalAmount).map(debt => (
+                [...debts].sort((a,b) => b.totalAmount - a.totalAmount).map(debt => (
                   <div key={debt.id} className="bg-white border border-slate-100 rounded-[2rem] p-8 shadow-xl shadow-slate-100/50 hover:shadow-2xl hover:shadow-orange-100/40 transition-all group relative border-b-4 border-b-slate-900">
                     <div className="flex items-start justify-between mb-8">
                       <div className="flex items-center gap-5">
@@ -2370,6 +2386,7 @@ export default function App() {
                      <img 
                        src="https://images.unsplash.com/photo-1543269865-cbf427effbad?auto=format&fit=crop&q=80&w=400" 
                        alt="Sem contas" 
+                       referrerPolicy="no-referrer"
                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                      />
                   </div>
