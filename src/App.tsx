@@ -754,9 +754,9 @@ export default function App() {
       await updateDoc(doc(db, 'team_members', memberEmail), { permissions });
       addNotification('Permissões atualizadas com sucesso!', "success");
       setEditingPermissionsMember(null);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Erro ao atualizar permissões:', err);
-      addNotification(`Erro ao salvar: ${err.message}`, "error");
+      handleFirestoreError(err, 'update', 'team_members');
     }
   };
 

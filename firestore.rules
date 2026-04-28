@@ -67,6 +67,8 @@ service cloud.firestore {
         // Other owners can delete non-owners
         (isOwnerOf(resource.data.tenantId) && resource.data.role != 'owner')
       );
+
+      allow update: if isSignedIn() && isOwnerOf(resource.data.tenantId) && (incoming().tenantId == resource.data.tenantId);
     }
 
     // --- accounts ---
