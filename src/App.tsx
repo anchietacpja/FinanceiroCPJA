@@ -50,7 +50,13 @@ import {
 
 const SafeLogo = ({ src, alt, className, fallbackIcon: Fallback = School }: { src: string; alt: string; className?: string; fallbackIcon?: any }) => {
   const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(true);
   
+  useEffect(() => {
+    setError(false);
+    setLoading(true);
+  }, [src]);
+
   if (error || !src) {
     return (
       <div className={`${className} flex items-center justify-center bg-slate-50 text-slate-300`}>
@@ -60,15 +66,24 @@ const SafeLogo = ({ src, alt, className, fallbackIcon: Fallback = School }: { sr
   }
 
   return (
-    <img 
-      src={src} 
-      alt={alt} 
-      className={className} 
-      onError={() => {
-        console.warn(`Failed to load logo: ${src}`);
-        setError(true);
-      }} 
-    />
+    <div className={`relative ${className}`}>
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-50 text-slate-200">
+          <Fallback size={20} strokeWidth={1} className="animate-pulse" />
+        </div>
+      )}
+      <img 
+        src={src} 
+        alt={alt} 
+        className={`${className} ${loading ? 'opacity-0' : 'opacity-100'}`} 
+        onLoad={() => setLoading(false)}
+        onError={(e) => {
+          console.error(`Failed to load logo: ${src}`, e);
+          setError(true);
+          setLoading(false);
+        }} 
+      />
+    </div>
   );
 };
 import { motion, AnimatePresence } from 'motion/react';
@@ -1104,6 +1119,12 @@ export default function App() {
               transition={{ delay: 0.1 }}
             >
               <div className="bg-white p-8 md:p-12 rounded-[48px] shadow-[0_32px_128px_-16px_rgba(0,0,0,0.5)] border border-white/10 relative overflow-hidden">
+                <div className="flex justify-center lg:justify-start mb-8">
+                  <div className="w-20 h-20 bg-white rounded-3xl p-3 shadow-xl border border-slate-50 flex items-center justify-center">
+                    <SafeLogo src={LOGO_ANCHIETA} alt="School Logo" className="w-full h-full object-contain" fallbackIcon={GraduationCap} />
+                  </div>
+                </div>
+
                 {/* Watermark logo */}
                 <div className="absolute -top-10 -right-10 opacity-[0.03] rotate-12 pointer-events-none">
                     <GraduationCap size={200} />
@@ -1255,7 +1276,7 @@ export default function App() {
                   </div>
                   <div>
                     <p className="text-[9px] font-black uppercase text-white/40 tracking-[0.3em] leading-none mb-1.5">Arquitetura de Software</p>
-                    <p className="text-xs font-black text-white uppercase tracking-wider">{PLATFORM_NAME} HUB</p>
+                    <p className="text-xs font-black text-white uppercase tracking-wider">{PLATFORM_NAME}</p>
                   </div>
                 </div>
                 
@@ -1407,7 +1428,7 @@ export default function App() {
                </div>
                <div className="text-center">
                  <p className="text-[6px] font-black text-slate-400 uppercase tracking-[0.5em] mb-0.5 opacity-60 leading-none">Desenvolvido por</p>
-                 <h3 className="text-[9px] font-black text-slate-900 tracking-tighter uppercase italic leading-none">{PLATFORM_NAME} HUB</h3>
+                 <h3 className="text-[9px] font-black text-slate-900 tracking-tighter uppercase italic leading-none">{PLATFORM_NAME}</h3>
                </div>
             </div>
           </div>

@@ -6,10 +6,9 @@
 import { Category, FundSource } from './types';
 
 // Logos are now in public folder
-const baseUrl = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
-const logo = `${baseUrl}/logoo.png`;
-const logoAnchieta = `${baseUrl}/logo_anchieta.png`;
-const logoCPJA = `${baseUrl}/logo_cpja.jpg`;
+const logo = '/dono.png?v=3';
+const logoAnchieta = '/logo_anchieta.png?v=3';
+const logoCPJA = '/logo_cpja.jpg?v=3';
 
 export const CATEGORIES: { value: Category; label: string; color: string }[] = [
   { value: 'escola', label: 'Escola (Geral)', color: 'bg-orange-500' },
