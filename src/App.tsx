@@ -216,7 +216,7 @@ export default function App() {
       const newTxs = data.transactions.map((t: any) => ({
         ...t,
         category: suggestCategory(t.description, knowledge),
-        fundSource: 'bb_corrente'
+        accountId: accounts[0]?.id || 'default'
       }));
 
       setPreviewTransactions(newTxs);
@@ -562,15 +562,17 @@ export default function App() {
     return authorizedTransactions.filter(t => {
       if (t.type === 'income') return false; // Inconsistências costumam ser saídas
       
-      const isPublicSource = t.fundSource !== 'pessoal' && t.fundSource !== 'cantina';
-      const isPrivateSource = t.fundSource === 'pessoal' || t.fundSource === 'cantina';
+      const account = accounts.find(acc => acc.id === t.accountId);
+      const accName = (account?.name || '').toLowerCase();
+      const isPublicSource = !accName.includes('pessoal') && !accName.includes('cantina');
+      const isPrivateSource = accName.includes('pessoal') || accName.includes('cantina');
 
       if (t.category === 'pessoal' && isPublicSource) return true;
       if (t.category === 'escola' && isPrivateSource) return true;
       if (t.category === 'cantina' && isPublicSource) return true;
       return false;
     });
-  }, [authorizedTransactions]);
+  }, [authorizedTransactions, accounts]);
 
   // Métricas do período filtrado
   const schoolMetrics = useMemo(() => {
@@ -929,7 +931,7 @@ export default function App() {
         date: t.date,
         description: `TRANSFERÊNCIA: ${t.description}`,
         amount: t.amount,
-        type: t.transfer ? 'transfer' : 'expense', // Fallback for safety
+        type: 'transfer', 
         category: 'transferencia',
         accountId: t.fromAccountId,
         toAccountId: t.toAccountId,
@@ -1645,7 +1647,7 @@ export default function App() {
                   </div>
                   <p className="text-[11px] font-black uppercase tracking-[0.3em] mb-2 opacity-80 italic">Saldo Consolidado</p>
                   <p className="text-3xl font-mono font-black tracking-tighter">
-                    R$ {Object.values(balances).reduce((acc, b) => acc + b, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    R$ {(Object.values(balances) as number[]).reduce((acc: number, b: number) => acc + b, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </p>
                   <p className="text-[10px] mt-4 font-black uppercase opacity-60">Soma de todas as contas</p>
                 </div>
@@ -2405,11 +2407,11 @@ export default function App() {
             </div>
           </div>
         ) : activeTab === 'payables' ? (
-          <div className="space-y-8">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-6 md:y-8 px-0 md:px-0">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 px-4 md:px-0">
               <div>
-                <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-2 italic">Agenda de Contas</h2>
-                <p className="text-slate-500 font-medium font-serif">Acompanhamento diário de compromissos financeiros</p>
+                <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight mb-1 md:mb-2 italic uppercase">Agenda de Contas</h2>
+                <p className="text-slate-500 text-xs md:text-sm font-medium font-serif">Compromissos financeiros agendados</p>
               </div>
               {userRole === 'owner' && (
                 <button 
@@ -2417,18 +2419,18 @@ export default function App() {
                     setEditingBill(null);
                     setShowBillModal(true);
                   }}
-                  className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 px-8 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl shadow-orange-100 active:scale-95 uppercase text-xs tracking-widest"
+                  className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 md:py-4 px-6 md:px-8 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl shadow-orange-100 active:scale-95 uppercase text-[10px] md:text-xs tracking-widest w-full md:w-auto"
                 >
-                  <Plus size={20} strokeWidth={3} />
+                  <Plus size={18} md:size={20} strokeWidth={3} />
                   Agendar Pagamento
                 </button>
               )}
             </div>
 
-            <div className="grid grid-cols-1 gap-8">
+            <div className="grid grid-cols-1 gap-6 md:gap-8">
               {authorizedBills.length === 0 ? (
-                <div className="bg-slate-50 border-4 border-dashed border-slate-200 rounded-[3rem] p-24 text-center group">
-                  <div className="w-48 h-48 mx-auto mb-8 bg-white rounded-full flex items-center justify-center border-4 border-slate-100 overflow-hidden shadow-2xl">
+                <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2rem] md:rounded-[3rem] p-12 md:p-24 text-center group mx-4 md:mx-0">
+                  <div className="w-32 h-32 md:w-48 md:h-48 mx-auto mb-6 md:mb-8 bg-white rounded-full flex items-center justify-center border-2 md:border-4 border-slate-100 overflow-hidden shadow-xl md:shadow-2xl">
                      <img 
                        src="https://images.unsplash.com/photo-1543269865-cbf427effbad?auto=format&fit=crop&q=80&w=400" 
                        alt="Sem contas" 
@@ -2436,8 +2438,8 @@ export default function App() {
                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                      />
                   </div>
-                  <h4 className="text-xl font-black text-slate-800 uppercase tracking-tighter mb-2 italic">Agenda Livre</h4>
-                  <p className="text-slate-400 font-black uppercase text-[10px] tracking-[0.2em] max-w-xs mx-auto">Nenhum compromisso pendente encontrado para o seu nível de acesso.</p>
+                  <h4 className="text-lg md:text-xl font-black text-slate-800 uppercase tracking-tighter mb-2 italic">Agenda Livre</h4>
+                  <p className="text-slate-400 font-black uppercase text-[8px] md:text-[10px] tracking-[0.2em] max-w-xs mx-auto">Nenhum compromisso pendente encontrado no seu nível.</p>
                 </div>
               ) : (
                 Object.entries(authorizedBills.reduce((acc, bill) => {
@@ -2446,52 +2448,53 @@ export default function App() {
                   acc[date].push(bill);
                   return acc;
                 }, {} as Record<string, Bill[]>)).sort(([a], [b]) => a.localeCompare(b)).map(([date, dayBills]: [string, Bill[]]) => (
-                  <div key={date} className="relative pl-8 md:pl-16">
-                    <div className="absolute left-0 top-0 bottom-0 w-px bg-slate-200 ml-[11px] md:ml-[31px]"></div>
-                    <div className="absolute left-0 top-0 w-6 h-6 md:w-16 md:h-16 flex flex-col items-center justify-center bg-white border-2 border-slate-200 rounded-xl md:rounded-2xl shadow-sm z-10 text-slate-800">
-                       <span className="text-[8px] md:text-[10px] font-black uppercase tracking-tight opacity-50">{new Date(date + 'T00:00:00').toLocaleDateString('pt-BR', { month: 'short' })}</span>
-                       <span className="text-sm md:text-xl font-mono font-black">{new Date(date + 'T00:00:00').getDate()}</span>
+                  <div key={date} className="relative pl-12 md:pl-20 pr-4 md:pr-0">
+                    <div className="absolute left-[23px] md:left-[35px] top-0 bottom-0 w-px bg-slate-200"></div>
+                    <div className="absolute left-0 top-0 w-12 h-12 md:w-18 md:h-18 flex flex-col items-center justify-center bg-white border-2 border-slate-200 rounded-xl md:rounded-2xl shadow-sm z-10 text-slate-800">
+                       <span className="text-[7px] md:text-[9px] font-black uppercase tracking-tight opacity-50 leading-none">{new Date(date + 'T00:00:00').toLocaleDateString('pt-BR', { month: 'short' })}</span>
+                       <span className="text-base md:text-2xl font-mono font-black border-y border-slate-100 my-0.5 w-full text-center">{new Date(date + 'T00:00:00').getDate()}</span>
+                       <span className="text-[6px] md:text-[8px] font-black uppercase tracking-widest opacity-40 leading-none truncate w-full text-center px-1">{new Date(date + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'short' })}</span>
                     </div>
 
-                    <div className="space-y-4">
+                    <div className="space-y-3 md:space-y-4">
                       {dayBills.map(bill => (
-                        <div key={bill.id} className={`bg-white border rounded-[1.5rem] p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 transition-all hover:shadow-md ${bill.status === 'paid' ? 'border-emerald-100 bg-emerald-50/20 opacity-60' : 'border-slate-100'}`}>
-                          <div className="flex items-center gap-6">
-                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${CATEGORIES.find(c => c.value === bill.category)?.color} text-white shadow-lg`}>
-                               {bill.status === 'paid' ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}
+                        <div key={bill.id} className={`bg-white border rounded-2xl md:rounded-[1.5rem] p-4 md:p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 transition-all hover:shadow-md ${bill.status === 'paid' ? 'border-emerald-100 bg-emerald-50/10 opacity-60' : 'border-slate-100'}`}>
+                          <div className="flex items-center gap-4 md:gap-6">
+                            <div className={`w-12 h-12 md:w-14 md:h-14 shrink-0 rounded-xl md:rounded-2xl flex items-center justify-center ${CATEGORIES.find(c => c.value === bill.category)?.color} text-white shadow-lg`}>
+                               {bill.status === 'paid' ? <CheckCircle2 size={20} md:size={24} /> : <AlertCircle size={20} md:size={24} />}
                             </div>
-                            <div>
-                               <div className="flex items-center gap-2 mb-1">
-                                 <h4 className="font-black text-slate-800 uppercase tracking-tight text-sm">{bill.description}</h4>
+                            <div className="min-w-0">
+                               <div className="flex flex-wrap items-center gap-2 mb-0.5 md:mb-1">
+                                 <h4 className="font-black text-slate-800 uppercase tracking-tight text-xs md:text-sm truncate">{bill.description}</h4>
                                  {bill.status === 'paid' && (
-                                   <span className="bg-emerald-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest">Pago</span>
+                                   <span className="bg-emerald-500 text-white text-[7px] md:text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-widest shrink-0">Pago</span>
                                  )}
                                </div>
-                               <div className="flex items-center gap-3">
-                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{CATEGORIES.find(c => c.value === bill.category)?.label}</span>
-                                 <span className="w-1.5 h-1.5 bg-slate-200 rounded-full"></span>
-                                 <span className="text-[10px] font-mono font-bold text-slate-500">{new Date(bill.dueDate + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'long' })}</span>
+                               <div className="flex items-center gap-2 md:gap-3 overflow-hidden text-ellipsis whitespace-nowrap">
+                                 <span className="text-[8px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{CATEGORIES.find(c => c.value === bill.category)?.label}</span>
+                                 <span className="hidden md:inline w-1 md:w-1.5 h-1 md:h-1.5 bg-slate-200 rounded-full"></span>
+                                 <span className="text-[8px] md:text-[10px] font-mono font-bold text-slate-400 md:text-slate-500 uppercase">{new Date(bill.dueDate + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'short' })}</span>
                                </div>
                             </div>
                           </div>
 
-                          <div className="flex items-center justify-between md:justify-end gap-6 md:gap-12 pl-20 md:pl-0">
-                             <div className="text-right">
-                               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Valor Previsto</p>
-                               <p className={`text-xl font-mono font-black ${bill.status === 'paid' ? 'text-emerald-600' : 'text-slate-800'}`}>
+                          <div className="flex items-center justify-between md:justify-end gap-3 md:gap-12 pt-3 md:pt-0 border-t md:border-t-0 border-slate-50 mt-1 md:mt-0">
+                             <div className="text-left md:text-right">
+                               <p className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5 md:mb-1 leading-none">Valor Previsto</p>
+                               <p className={`text-lg md:text-xl font-mono font-black leading-none ${bill.status === 'paid' ? 'text-emerald-600' : 'text-slate-800'}`}>
                                  R$ {bill.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                                </p>
                              </div>
 
                              {userRole === 'owner' && (
-                               <div className="flex items-center gap-2">
+                               <div className="flex items-center gap-1 md:gap-2 shrink-0">
                                  {bill.status === 'pending' && (
                                    <button 
                                     onClick={() => markBillAsPaid(bill)}
-                                    className="bg-emerald-500 hover:bg-emerald-600 text-white p-3 rounded-xl transition-all shadow-lg shadow-emerald-100 active:scale-95"
+                                    className="bg-emerald-500 hover:bg-emerald-600 text-white p-2 md:p-3 rounded-lg md:rounded-xl transition-all shadow-lg shadow-emerald-100 active:scale-95"
                                     title="Marcar como Pago"
                                    >
-                                     <CheckCircle2 size={20} />
+                                     <CheckCircle2 size={16} md:size={20} />
                                    </button>
                                  )}
                                  <button 
@@ -2499,10 +2502,10 @@ export default function App() {
                                     setEditingBill(bill);
                                     setShowBillModal(true);
                                   }}
-                                  className="p-3 text-slate-300 hover:text-orange-600 transition-colors"
+                                  className="p-2 md:p-3 text-slate-300 hover:text-orange-600 transition-colors"
                                   title="Editar"
                                  >
-                                   <Pencil size={20} />
+                                   <Pencil size={16} md:size={20} />
                                  </button>
                                  <button 
                                   onClick={() => {
@@ -2510,10 +2513,10 @@ export default function App() {
                                       deleteBill(bill.id);
                                     }
                                   }}
-                                  className="p-3 text-slate-300 hover:text-red-500 transition-colors"
+                                  className="p-2 md:p-3 text-slate-300 hover:text-red-500 transition-colors"
                                   title="Excluir"
                                  >
-                                   <Trash2 size={20} />
+                                   <Trash2 size={16} md:size={20} />
                                  </button>
                                </div>
                              )}
@@ -3260,8 +3263,8 @@ export default function App() {
                       amount: parsedAmount,
                       type: modalType,
                       category: (modalType === 'transfer' ? 'transferencia' : formData.get('category')) as Category,
-                      fundSource: formData.get('accountId') as string,
-                      toFundSource: modalType === 'transfer' ? formData.get('toAccountId') as string : undefined,
+                      accountId: formData.get('accountId') as string,
+                      toAccountId: modalType === 'transfer' ? formData.get('toAccountId') as string : undefined,
                     } as any);
                   } catch (err: any) {
                     console.error("Erro crítico ao salvar:", err);
