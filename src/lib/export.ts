@@ -1,7 +1,7 @@
-import { Transaction } from '../types';
-import { CATEGORIES, FUND_SOURCES } from '../constants';
+import { Transaction, Account } from '../types';
+import { CATEGORIES } from '../constants';
 
-export function exportTransactionsToCSV(transactions: Transaction[]) {
+export function exportTransactionsToCSV(transactions: Transaction[], accounts: Account[]) {
   const headers = ['Data', 'Descricao', 'Tipo', 'Categoria', 'Conta', 'Valor'];
   
   const rows = transactions.map(t => [
@@ -9,7 +9,7 @@ export function exportTransactionsToCSV(transactions: Transaction[]) {
     `"${t.description.replace(/"/g, '""')}"`,
     t.type === 'income' ? 'Entrada' : t.type === 'expense' ? 'Saída' : 'Transferência',
     CATEGORIES.find(c => c.value === t.category)?.label || t.category,
-    FUND_SOURCES.find(f => f.value === t.fundSource)?.label || t.fundSource,
+    accounts.find(acc => acc.id === t.accountId)?.name || t.accountId,
     (t.amount || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, useGrouping: false }).replace('.', ',')
   ]);
 

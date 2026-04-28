@@ -47,7 +47,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Transaction, Category, FundSource, Debt, Bill, UserRole, TeamMember } from './types';
+import { Transaction, Category, FundSource, Debt, Bill, UserRole, TeamMember, Account, Transfer } from './types';
 import { CATEGORIES, FUND_SOURCES, LOGO_ANCHIETA, LOGO_CPJA, SCHOOL_NAME, PLATFORM_NAME, APP_LOGO } from './constants';
 import { auth, db, signInWithGoogle, loginWithEmail, registerWithEmail, createCollaboratorAccount, logout, handleFirestoreError } from './lib/firebase';
 import { exportTransactionsToCSV } from './lib/export';
@@ -88,10 +88,14 @@ export default function App() {
   const [currentTenantId, setCurrentTenantId] = useState<string | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'transactions' | 'reports' | 'debts' | 'payables' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'transactions' | 'accounts' | 'reports' | 'debts' | 'payables' | 'settings'>('dashboard');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showAccountModal, setShowAccountModal] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [showDebtModal, setShowDebtModal] = useState(false);
   const [showBillModal, setShowBillModal] = useState(false);
   const [editingBill, setEditingBill] = useState<Bill | null>(null);
@@ -252,6 +256,8 @@ export default function App() {
         ...(doc.data() as any)
       })) as TeamMember[];
       setTeamMembers(members);
+    }, (err) => {
+      handleFirestoreError(err, 'get' as any, 'team_members');
     });
 
     return () => unsubscribe();
@@ -279,11 +285,45 @@ export default function App() {
       console.log("Transações sincronizadas:", sortedTxs.length);
       setTransactions(sortedTxs);
     }, (err) => {
-      console.error("Erro ao sincronizar transações:", err);
-      // Notificar usuário se falhar por permissão
-      if (err.code === 'permission-denied') {
-        alert("Erro de permissão ao carregar dados. Verifique seu acesso.");
-      }
+      handleFirestoreError(err, 'get' as any, 'transactions');
+    });
+
+    return () => unsubscribe();
+  }, [user, currentTenantId]);
+
+  // Real-time synchronization for Accounts
+  useEffect(() => {
+    if (!user || !currentTenantId) return;
+
+    const q = query(
+      collection(db, 'accounts'),
+      where('tenantId', '==', currentTenantId)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const accs = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) })) as Account[];
+      setAccounts(accs.sort((a, b) => b.createdAt - a.createdAt));
+    }, (err) => {
+      handleFirestoreError(err, 'get' as any, 'accounts');
+    });
+
+    return () => unsubscribe();
+  }, [user, currentTenantId]);
+
+  // Real-time synchronization for Transfers
+  useEffect(() => {
+    if (!user || !currentTenantId) return;
+
+    const q = query(
+      collection(db, 'transfers'),
+      where('tenantId', '==', currentTenantId)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const trs = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) })) as Transfer[];
+      setTransfers(trs.sort((a, b) => b.createdAt - a.createdAt));
+    }, (err) => {
+      handleFirestoreError(err, 'get' as any, 'transfers');
     });
 
     return () => unsubscribe();
@@ -383,8 +423,8 @@ export default function App() {
         }
         
         // Filtrar por origens/contas (se a lista existir, o usuário só vê o que está nela)
-        if (userPermissions.fundSources) {
-          filtered = filtered.filter(t => userPermissions.fundSources?.includes(t.fundSource));
+        if (userPermissions.accountId) {
+          filtered = filtered.filter(t => userPermissions.accountId?.includes(t.accountId));
         }
       } else {
         // Se for um viewer sem objeto de permissões no banco, bloqueamos por segurança ou mostramos tudo?
@@ -455,34 +495,27 @@ export default function App() {
   };
 
   const balances = useMemo(() => {
-    const b: Record<FundSource, number> = {
-      caixa_fisico: 0,
-      bb_corrente: 0,
-      bb_poupanca: 0,
-      mercado_pago: 0,
-      nubank: 0,
-      ton: 0,
-      caixa_poupanca: 0,
-      pessoal: 0,
-      cantina: 0,
-    };
+    const b: Record<string, number> = {};
+    accounts.forEach(acc => {
+      b[acc.id] = 0;
+    });
 
     authorizedTransactions.forEach(t => {
       if (t.type === 'income') {
-        b[t.fundSource] += t.amount || 0;
+        if (b[t.accountId] !== undefined) b[t.accountId] += t.amount || 0;
       } else if (t.type === 'expense') {
-        b[t.fundSource] -= t.amount || 0;
+        if (b[t.accountId] !== undefined) b[t.accountId] -= t.amount || 0;
       } else if (t.type === 'transfer') {
-        // Para transferências, o fundSource é de onde SAI e toFundSource é para onde VAI
-        b[t.fundSource] -= t.amount || 0;
-        if (t.toFundSource) {
-          b[t.toFundSource] += t.amount || 0;
+        // Para transferências, o accountId é de onde SAI e toAccountId é para onde VAI
+        if (b[t.accountId] !== undefined) b[t.accountId] -= t.amount || 0;
+        if (t.toAccountId && b[t.toAccountId] !== undefined) {
+          b[t.toAccountId] += t.amount || 0;
         }
       }
     });
 
     return b;
-  }, [authorizedTransactions]);
+  }, [authorizedTransactions, accounts]);
 
   // Cruzamento de dados: Quando gastamos dinheiro da 'origem' errada
   const inconsistencies = useMemo(() => {
@@ -549,12 +582,12 @@ export default function App() {
           amount: t.amount,
           type: t.type,
           category: t.type === 'transfer' ? 'transferencia' : t.category,
-          fundSource: t.fundSource,
+          accountId: t.accountId,
         };
-        if (t.type === 'transfer' && t.toFundSource) {
-          updateData.toFundSource = t.toFundSource;
+        if (t.type === 'transfer' && t.toAccountId) {
+          updateData.toAccountId = t.toAccountId;
         } else {
-          updateData.toFundSource = null;
+          updateData.toAccountId = null;
         }
         await updateDoc(docRef, updateData);
         setEditingTransaction(null);
@@ -566,13 +599,13 @@ export default function App() {
           amount: t.amount,
           type: t.type,
           category: t.type === 'transfer' ? 'transferencia' : t.category,
-          fundSource: t.fundSource,
+          accountId: t.accountId,
           userId: currentTenantId,
           createdAt: serverTimestamp(),
         };
 
-        if (t.type === 'transfer' && t.toFundSource) {
-          cleanData.toFundSource = t.toFundSource;
+        if (t.type === 'transfer' && t.toAccountId) {
+          cleanData.toAccountId = t.toAccountId;
         }
 
         console.log("Salvando nova transação:", cleanData);
@@ -732,7 +765,20 @@ export default function App() {
     try {
       const docRef = doc(db, 'debts', id);
       await updateDoc(docRef, data as any);
+      addNotification("Dívida atualizada com sucesso.", "success");
     } catch (err) {
+      console.error("Erro ao atualizar dívida:", err);
+      // Extrair mensagem legível se for JSON do handleFirestoreError
+      let displayMsg = "Tente novamente.";
+      if (err instanceof Error) {
+        try {
+          const parsed = JSON.parse(err.message);
+          if (parsed.error) displayMsg = `Permissão Negada: ${parsed.operationType} em ${parsed.path}`;
+        } catch {
+          displayMsg = err.message;
+        }
+      }
+      alert("Erro ao atualizar dívida: " + displayMsg);
       handleFirestoreError(err, 'update', 'debts');
     }
   };
@@ -785,6 +831,91 @@ export default function App() {
     }
   };
 
+  const addAccount = async (a: Omit<Account, 'id' | 'createdAt' | 'tenantId'>) => {
+    if (!user || userRole !== 'owner') return;
+    try {
+      if (editingAccount) {
+        await updateDoc(doc(db, 'accounts', editingAccount.id), {
+          ...a,
+        });
+        setEditingAccount(null);
+      } else {
+        await addDoc(collection(db, 'accounts'), {
+          ...a,
+          tenantId: currentTenantId,
+          createdAt: Date.now(),
+        });
+      }
+      setShowAccountModal(false);
+      addNotification("Conta salva com sucesso!", "success");
+    } catch (err) {
+      handleFirestoreError(err, editingAccount ? 'update' : 'create', 'accounts');
+    }
+  };
+
+  const deleteAccount = async (id: string) => {
+    if (!user || userRole !== 'owner') return;
+    // Check if account has transactions
+    const hasTransactions = transactions.some(t => t.accountId === id);
+    if (hasTransactions) {
+      alert("Não é possível excluir uma conta que possui movimentações. Tente apenas renomear ou ocultar.");
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, 'accounts', id));
+      addNotification("Conta removida.", "success");
+    } catch (err) {
+      handleFirestoreError(err, 'delete', 'accounts');
+    }
+  };
+
+  const addTransfer = async (t: { fromAccountId: string, toAccountId: string, amount: number, description: string, date: string }) => {
+    if (!user || userRole === 'viewer') return;
+    try {
+      setIsProcessing(true);
+      const timestamp = Date.now();
+      
+      // 1. Create Transfer Record
+      await addDoc(collection(db, 'transfers'), {
+        ...t,
+        tenantId: currentTenantId,
+        createdAt: timestamp,
+      });
+
+      // 2. Create Outgoing Transaction
+      await addDoc(collection(db, 'transactions'), {
+        date: t.date,
+        description: `TRANSFERÊNCIA (SAÍDA): ${t.description}`,
+        amount: t.amount,
+        type: 'transfer',
+        category: 'transferencia',
+        accountId: t.fromAccountId,
+        toAccountId: t.toAccountId,
+        userId: currentTenantId,
+        createdAt: serverTimestamp(),
+      });
+
+      // 3. Create Incoming Transaction
+      await addDoc(collection(db, 'transactions'), {
+        date: t.date,
+        description: `TRANSFERÊNCIA (ENTRADA): ${t.description}`,
+        amount: t.amount,
+        type: 'income',
+        category: 'transferencia',
+        accountId: t.toAccountId,
+        userId: currentTenantId,
+        createdAt: serverTimestamp(),
+      });
+
+      setShowAddModal(false);
+      addNotification("Transferência realizada com sucesso!", "success");
+    } catch (err) {
+      handleFirestoreError(err, 'create', 'transfers');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const markBillAsPaid = async (bill: Bill) => {
     if (!user || userRole === 'viewer') return;
     try {
@@ -795,7 +926,7 @@ export default function App() {
         amount: bill.amount,
         type: 'expense',
         category: bill.category,
-        fundSource: 'caixa_fisico', // Default to cash, user can edit later
+        accountId: accounts[0]?.id || 'caixa_fisico', // Default to first account
       });
       // Mark bill as paid
       await updateDoc(doc(db, 'bills', bill.id), {
@@ -824,7 +955,7 @@ export default function App() {
             amount: parsed.amount,
             type: parsed.type,
             category: suggestCategory(parsed.description, knowledge),
-            fundSource: 'bb_corrente', // Default para extrato bancário
+            accountId: accounts[0]?.id || 'caixa_fisico', // Default para extrato bancário
           });
         }
       });
@@ -892,24 +1023,35 @@ export default function App() {
               animate={{ opacity: 1, x: 0 }}
               className="flex flex-col items-center lg:items-start gap-12"
             >
+              {/* Creator Highlight Box */}
+              <div className="bg-slate-800/80 backdrop-blur-xl border border-white/10 p-6 rounded-[2rem] shadow-2xl flex items-center gap-5 group hover:bg-slate-800 transition-all">
+                <div className="w-14 h-14 bg-white rounded-2xl p-2.5 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                  <img src={APP_LOGO} className="w-full h-full object-contain" alt="Creator Logo" referrerPolicy="no-referrer" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase text-orange-500 tracking-[0.4em] leading-none mb-1.5">Plataforma</p>
+                  <p className="text-xl font-black text-white italic tracking-tighter leading-none uppercase">{PLATFORM_NAME} <span className="text-orange-500">HUB</span></p>
+                </div>
+              </div>
+
               <div className="flex items-center gap-6">
                 <div className="flex items-center gap-3">
                   <motion.div 
                     whileHover={{ scale: 1.05 }}
                     className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-2xl overflow-hidden border border-slate-100 p-2"
                   >
-                    <img src={LOGO_ANCHIETA} alt="School Logo 1" className="w-full h-full object-contain" />
+                    <img src={LOGO_ANCHIETA} alt="School Logo 1" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
                   </motion.div>
                   <motion.div 
                     whileHover={{ scale: 1.05 }}
                     className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-2xl overflow-hidden border border-slate-100 p-2"
                   >
-                    <img src={LOGO_CPJA} alt="School Logo 2" className="w-full h-full object-contain" />
+                    <img src={LOGO_CPJA} alt="School Logo 2" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
                   </motion.div>
                 </div>
                 <div className="h-12 w-[1px] bg-white/20"></div>
                 <div className="text-left">
-                  <p className="text-[10px] font-black uppercase text-orange-500 tracking-[0.4em] leading-none mb-2">Ecossistema</p>
+                  <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.4em] leading-none mb-2">Ecossistema</p>
                   <p className="text-xl font-black text-white italic tracking-tighter leading-none shadow-sm uppercase">{SCHOOL_NAME}</p>
                 </div>
               </div>
@@ -1094,7 +1236,7 @@ export default function App() {
               >
                 <div className="flex items-center gap-3">
                   <div className="bg-white rounded-2xl p-2.5 flex items-center justify-center shadow-lg border border-slate-100">
-                    <img src={APP_LOGO} className="w-8 h-8 object-contain" alt="Nokite Logo" />
+                    <img src={APP_LOGO} className="w-8 h-8 object-contain" alt="Nokite Logo" referrerPolicy="no-referrer" />
                   </div>
                   <div>
                     <p className="text-[9px] font-black uppercase text-white/40 tracking-[0.3em] leading-none mb-1.5">Arquitetura de Software</p>
@@ -1128,88 +1270,102 @@ export default function App() {
       <div className="fixed inset-0 z-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'repeating-linear-gradient(transparent, transparent 31px, #94a3b8 31px, #94a3b8 32px)' }}></div>
 
       {/* Sidebar Navigation */}
-      <nav className="fixed bottom-0 left-0 w-full h-18 md:h-full bg-white border-t border-slate-200 flex flex-row md:fixed md:left-0 md:top-0 md:w-64 md:border-r md:border-t-0 md:flex-col z-50 shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.05)] md:shadow-none">
-        <div className="p-6 hidden md:flex flex-col gap-4">
-           <div className="flex items-center gap-2">
-             <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow-sm overflow-hidden border border-slate-100 p-1 hover:scale-110 transition-transform duration-500">
-                <img src={LOGO_ANCHIETA} alt="School Logo" title="Colégio Anchieta" className="w-full h-full object-contain" />
+      <nav className="fixed bottom-0 left-0 w-full h-20 md:h-full bg-white border-t border-slate-200 flex flex-row md:fixed md:left-0 md:top-0 md:w-64 md:border-r md:border-t-0 md:flex-col z-50 shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.05)] md:shadow-none">
+        
+        {/* School Identity Header */}
+        <div className="p-6 hidden md:flex flex-col gap-4 border-b border-slate-50 mb-2">
+           <div className="flex items-center gap-3">
+             <div className="flex -space-x-2">
+               <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-md overflow-hidden border border-slate-100 p-1 hover:z-10 transition-transform hover:scale-110">
+                  <img src={LOGO_ANCHIETA} alt="School Logo" title="Colégio Anchieta" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+               </div>
+               <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-md overflow-hidden border border-slate-100 p-1 hover:z-10 transition-transform hover:scale-110">
+                  <img src={LOGO_CPJA} alt="CPJA Logo" title="CPJA" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
+               </div>
              </div>
-             <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow-sm overflow-hidden border border-slate-100 p-1 hover:scale-110 transition-transform duration-500">
-                <img src={LOGO_CPJA} alt="CPJA Logo" title="CPJA" className="w-full h-full object-contain" />
-             </div>
+             <div>
+                <h1 className="font-black text-[14px] tracking-tighter text-slate-900 leading-tight uppercase italic">{SCHOOL_NAME}</h1>
+                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-[0.2em] mt-0.5 leading-none">Hub Financeiro</p>
+              </div>
            </div>
-           <div>
-              <h1 className="font-black text-[13px] tracking-tighter text-slate-900 leading-tight uppercase italic">{SCHOOL_NAME}</h1>
-              <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mt-0.5 leading-none">Centro Financeiro</p>
-            </div>
          </div>
 
-        <div className="flex-1 flex flex-row md:flex-col items-center justify-around md:justify-start px-2 md:px-4 md:mt-2 md:space-y-0.5 md:overflow-y-auto custom-scrollbar">
+        <div className="flex-1 flex flex-row md:flex-col items-center justify-start md:justify-start px-4 md:px-3 md:mt-2 md:space-y-1 overflow-x-auto md:overflow-y-auto custom-scrollbar scrollbar-hide gap-4 md:gap-0">
           {(userRole === 'owner' || (userPermissions?.tabs?.includes('dashboard') ?? true)) && (
             <button 
               onClick={() => setActiveTab('dashboard')}
-              className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 p-2 md:p-3.5 rounded-xl transition-all ${activeTab === 'dashboard' ? 'bg-orange-50 text-orange-900 shadow-sm' : 'text-slate-400 hover:text-orange-600 hover:bg-orange-50/50'}`}
+              className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 w-auto md:w-full p-2 md:px-4 md:py-3.5 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-orange-50 text-orange-600 shadow-sm border border-orange-100' : 'text-slate-400 hover:text-orange-600 hover:bg-orange-50/50'}`}
             >
-              <LayoutDashboard size={20} />
-              <span className="font-bold text-[10px] md:text-sm">Início</span>
+              <LayoutDashboard size={20} className={activeTab === 'dashboard' ? 'text-orange-600' : 'text-slate-400'} />
+              <span className="font-black text-[10px] md:text-xs uppercase tracking-widest">Painel</span>
+            </button>
+          )}
+
+          {(userRole === 'owner' || userPermissions?.tabs?.includes('accounts')) && (
+            <button 
+              onClick={() => setActiveTab('accounts')}
+              className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 w-auto md:w-full p-2 md:px-4 md:py-3.5 rounded-2xl transition-all ${activeTab === 'accounts' ? 'bg-orange-50 text-orange-600 shadow-sm border border-orange-100' : 'text-slate-400 hover:text-orange-600 hover:bg-orange-50/50'}`}
+            >
+              <Wallet size={20} className={activeTab === 'accounts' ? 'text-orange-600' : 'text-slate-400'} />
+              <span className="font-black text-[10px] md:text-xs uppercase tracking-widest">Contas</span>
             </button>
           )}
 
           {(userRole === 'owner' || userPermissions?.tabs?.includes('transactions')) && (
             <button 
               onClick={() => setActiveTab('transactions')}
-              className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 p-2 md:p-3.5 rounded-xl transition-all ${activeTab === 'transactions' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+              className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 w-auto md:w-full p-2 md:px-4 md:py-3.5 rounded-2xl transition-all ${activeTab === 'transactions' ? 'bg-slate-900 text-white shadow-xl translate-x-1' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-50'}`}
             >
               <History size={20} />
-              <span className="font-bold text-[10px] md:text-sm">Extrato</span>
+              <span className="font-black text-[10px] md:text-xs uppercase tracking-widest">Extrato</span>
             </button>
           )}
           
           {(userRole === 'owner' || userPermissions?.tabs?.includes('debts')) && (
             <button 
               onClick={() => setActiveTab('debts')}
-              className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 p-2 md:p-3.5 rounded-xl transition-all ${activeTab === 'debts' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+              className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 w-auto md:w-full p-2 md:px-4 md:py-3.5 rounded-2xl transition-all ${activeTab === 'debts' ? 'bg-slate-900 text-white shadow-xl translate-x-1' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-50'}`}
             >
               <CreditCard size={20} />
-              <span className="font-bold text-[10px] md:text-sm">Dívidas</span>
+              <span className="font-black text-[10px] md:text-xs uppercase tracking-widest">Dívidas</span>
             </button>
           )}
 
           {(userRole === 'owner' || userPermissions?.tabs?.includes('payables')) && (
             <button 
               onClick={() => setActiveTab('payables')}
-              className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 p-2 md:p-3.5 rounded-xl transition-all ${activeTab === 'payables' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+              className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 w-auto md:w-full p-2 md:px-4 md:py-3.5 rounded-2xl transition-all ${activeTab === 'payables' ? 'bg-slate-900 text-white shadow-xl translate-x-1' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-50'}`}
             >
               <Calendar size={20} />
-              <span className="font-bold text-[10px] md:text-sm">Contas</span>
+              <span className="font-black text-[10px] md:text-xs uppercase tracking-widest">Agenda</span>
             </button>
           )}
           
           {(userRole === 'owner' || userPermissions?.tabs?.includes('reports')) && (
             <button 
               onClick={() => setActiveTab('reports')}
-              className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 p-2 md:p-3.5 rounded-xl transition-all ${activeTab === 'reports' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+              className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 w-auto md:w-full p-2 md:px-4 md:py-3.5 rounded-2xl transition-all ${activeTab === 'reports' ? 'bg-slate-900 text-white shadow-xl translate-x-1' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-50'}`}
             >
               <Receipt size={20} />
-              <span className="font-bold text-[10px] md:text-sm">Relatos</span>
+              <span className="font-black text-[10px] md:text-xs uppercase tracking-widest">Relatos</span>
             </button>
           )}
 
           {userRole === 'owner' && (
             <button 
               onClick={() => setActiveTab('settings')}
-              className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 p-2 md:p-3.5 rounded-xl transition-all ${activeTab === 'settings' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}
+              className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 w-auto md:w-full p-2 md:px-4 md:py-3.5 rounded-2xl transition-all ${activeTab === 'settings' ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-50'}`}
             >
               <Users size={20} />
-              <span className="font-bold text-[10px] md:text-sm">Equipe</span>
+              <span className="font-black text-[10px] md:text-xs uppercase tracking-widest leading-none">Equipe</span>
             </button>
           )}
           <button 
             onClick={logout}
-            className="flex flex-col md:flex-row md:hidden items-center gap-1 p-2 text-slate-400 hover:text-red-600 transition-colors"
+            className="flex flex-col md:flex-row md:hidden items-center justify-center gap-1 p-3 bg-red-50 text-red-600 rounded-2xl hover:bg-red-100 transition-all min-w-[70px] border border-red-100"
           >
             <LogOut size={20} />
-            <span className="font-bold text-[10px]">Sair</span>
+            <span className="font-black text-[9px] uppercase tracking-tighter leading-none">Sair</span>
           </button>
         </div>
 
@@ -1232,7 +1388,7 @@ export default function App() {
           <div className="hidden md:block pt-4 border-t border-slate-100 mt-2 bg-white/50 rounded-t-2xl -mx-4 px-4 pb-2 group/dev">
             <div className="flex flex-col items-center gap-1.5 transition-all duration-500">
                <div className="w-8 h-8 bg-white rounded-lg p-1 border border-slate-200 shadow-sm group-hover/dev:shadow-md transition-all group-hover/dev:scale-105">
-                 <img src={APP_LOGO} className="w-full h-full object-contain" alt="Nokite Logo" />
+                 <img src={APP_LOGO} className="w-full h-full object-contain" alt="Nokite Logo" referrerPolicy="no-referrer" />
                </div>
                <div className="text-center">
                  <p className="text-[6px] font-black text-slate-400 uppercase tracking-[0.5em] mb-0.5 opacity-60 leading-none">Desenvolvido por</p>
@@ -1243,7 +1399,7 @@ export default function App() {
         </div>
       </nav>
 
-      <main className="pb-28 md:pb-10 md:ml-64 p-4 md:p-10 relative z-10 min-h-screen flex flex-col">
+      <main className="pb-40 md:pb-10 md:ml-64 p-4 md:p-10 relative z-10 min-h-screen flex flex-col">
         <div className="flex-1">
         {activeTab === 'dashboard' && (
           <div className="relative mb-12">
@@ -1383,6 +1539,95 @@ export default function App() {
                 </>
               )}
             </div>
+          </div>
+        )}
+
+        {activeTab === 'accounts' && (
+          <div className="space-y-6">
+            <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+              <div>
+                <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase italic">Contas Financeiras</h2>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Gestão de silos e separação de capital</p>
+              </div>
+              {userRole === 'owner' && (
+                <button 
+                  onClick={() => {
+                    setEditingAccount(null);
+                    setShowAccountModal(true);
+                  }}
+                  className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-4 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-orange-100 flex items-center gap-2 transition-all active:scale-95"
+                >
+                  <Plus size={18} />
+                  Nova Conta
+                </button>
+              )}
+            </header>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {accounts.map(acc => (
+                <motion.div 
+                  key={acc.id}
+                  layoutId={`acc-${acc.id}`}
+                  className="bg-white rounded-[2rem] p-8 shadow-sm border border-slate-100 relative overflow-hidden group"
+                >
+                  <div className={`absolute top-0 left-0 w-full h-2 ${acc.color || 'bg-slate-200'}`} />
+                  
+                  <div className="flex justify-between items-start mb-6">
+                    <div className="p-3 bg-slate-50 rounded-xl text-slate-400">
+                      <Wallet size={24} />
+                    </div>
+                    {userRole === 'owner' && (
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => {
+                            setEditingAccount(acc);
+                            setShowAccountModal(true);
+                          }}
+                          className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
+                        >
+                          <Pencil size={18} />
+                        </button>
+                        <button 
+                          onClick={() => deleteAccount(acc.id)}
+                          className="p-2 text-slate-400 hover:text-red-600 transition-colors"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight mb-1">{acc.name}</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-6">Saldo Atual</p>
+                    <p className="text-3xl font-black font-mono tracking-tighter text-slate-900 leading-none">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(balances[acc.id] || 0)}
+                    </p>
+                  </div>
+
+                  <div className="mt-8 pt-6 border-t border-slate-50 flex items-center justify-between">
+                    <div className="flex flex-col">
+                       <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1">Status</span>
+                       <span className="text-[10px] font-bold text-green-500 uppercase tracking-tighter leading-none">Ativa</span>
+                    </div>
+                    <div className="text-right">
+                       <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1">Última Ref.</span>
+                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none">{new Date(acc.createdAt).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+
+            {accounts.length === 0 && (
+              <div className="bg-slate-50 rounded-[3rem] p-20 text-center border-2 border-dashed border-slate-200">
+                <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm">
+                  <Wallet size={32} className="text-slate-200" />
+                </div>
+                <h3 className="text-xl font-black text-slate-400 uppercase tracking-widest mb-2">Nenhuma conta ativa</h3>
+                <p className="text-sm text-slate-300 max-w-xs mx-auto font-medium">Configure suas contas para começar a separar o dinheiro da empresa, pessoal e outras áreas.</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -1966,19 +2211,28 @@ export default function App() {
 
                     <div className="mt-6 flex gap-3">
                       <button 
-                        onClick={() => {
+                        onClick={async () => {
                           const newVal = prompt('Reduzir saldo devedor em (R$):', '0');
-                          if (newVal !== null && parseFloat(newVal) > 0) {
-                            const reduced = Math.max(0, debt.totalAmount - parseFloat(newVal));
-                            updateDebt(debt.id, { 
+                          if (newVal !== null) {
+                            const val = parseFloat(newVal.replace(',', '.'));
+                            if (isNaN(val) || val <= 0) {
+                              alert("Por favor, insira um valor válido maior que zero.");
+                              return;
+                            }
+                            
+                            const reduced = Math.max(0, debt.totalAmount - val);
+                            const remaining = debt.remainingInstallments ? Math.max(0, debt.remainingInstallments - 1) : undefined;
+                            
+                            await updateDebt(debt.id, { 
                                totalAmount: reduced,
-                               remainingInstallments: debt.remainingInstallments ? Math.max(0, debt.remainingInstallments - 1) : undefined,
+                               remainingInstallments: remaining,
                                status: reduced <= 0 ? 'paid' : 'active'
                             });
                           }
                         }}
-                        className="flex-1 py-4 bg-slate-900 hover:bg-black text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-xl transition-all shadow-xl shadow-slate-200 active:scale-95"
+                        className="flex-1 py-4 bg-slate-900 hover:bg-black text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-xl transition-all shadow-xl shadow-slate-200 active:scale-95 flex items-center justify-center gap-2"
                       >
+                        <CreditCard size={14} />
                         Pagar Parcela
                       </button>
                       <button 
@@ -2160,7 +2414,7 @@ export default function App() {
                       </select>
                     </div>
                     <button 
-                      onClick={() => exportTransactionsToCSV(periodFilteredTransactions)}
+                      onClick={() => exportTransactionsToCSV(periodFilteredTransactions, accounts)}
                       className="w-full mt-6 bg-slate-800 hover:bg-slate-900 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all uppercase text-xs tracking-widest"
                     >
                       <Download size={18} />
@@ -2400,12 +2654,12 @@ export default function App() {
           <>
             {/* Account Details (Moved from Dashboard) */}
             <div className="space-y-6 mb-10">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h3 className="text-lg font-black text-slate-900 uppercase tracking-tighter italic leading-none">Contas & Patrimônio</h3>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Conferência de saldos por origem de recurso</p>
                 </div>
-                <div className="flex gap-4">
+                <div className="flex flex-wrap gap-4">
                   {[
                     { label: 'Escola', color: '#f97316' },
                     { label: 'Cantina', color: '#10b981' },
@@ -2419,29 +2673,25 @@ export default function App() {
               </div>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {FUND_SOURCES.map((source, idx) => {
-                  const isSchool = source.value.includes('escola') || source.value.includes('bb_') || source.value.includes('ton') || source.value.includes('mercado');
-                  const isCantina = source.value.includes('cantina');
-                  const isPersonal = source.value.includes('pessoal') || source.value.includes('nubank');
-                  
+                {accounts.map((acc, idx) => {
                   return (
                     <motion.div 
-                      key={source.value} 
+                      key={acc.id} 
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: idx * 0.05 }}
                       className="bg-white border border-slate-100 p-5 rounded-[24px] shadow-sm hover:shadow-xl transition-all group border-b-4" 
-                      style={{ borderBottomColor: isSchool ? '#f97316' : isCantina ? '#10b981' : isPersonal ? '#fbbf24' : '#e2e8f0' }}
+                      style={{ borderBottomColor: acc.color || '#e2e8f0' }}
                     >
                       <div className="flex justify-between items-start mb-3">
                         <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-slate-900 group-hover:text-white transition-colors uppercase text-[9px] font-black">
-                          {source.label.substring(0, 2)}
+                          {acc.name.substring(0, 2)}
                         </div>
-                        <span className="text-[9px] font-mono text-slate-200 font-bold">VAL-{idx+1}</span>
+                        <span className="text-[9px] font-mono text-slate-100 font-bold">ACC-{idx+1}</span>
                       </div>
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.15em] mb-1 truncate">{source.label.split('(')[0].trim()}</p>
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.15em] mb-1 truncate">{acc.name}</p>
                       <p className="text-xl font-mono font-bold text-slate-900 leading-none tabular-nums">
-                        R$ {(balances[source.value] || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        R$ {(balances[acc.id] || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </p>
                     </motion.div>
                   );
@@ -2563,14 +2813,14 @@ export default function App() {
                                 {t.type === 'transfer' ? (
                                   <span className="flex items-center gap-2">
                                     <div className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-                                    {FUND_SOURCES.find(f => f.value === t.fundSource)?.label}
+                                    {accounts.find(f => f.id === t.accountId)?.name || t.accountId}
                                     <ArrowRight size={12} className="text-slate-300" />
-                                    {FUND_SOURCES.find(f => f.value === t.toFundSource)?.label}
+                                    {accounts.find(f => f.id === t.toAccountId)?.name || t.toAccountId}
                                   </span>
                                 ) : (
                                   <span className="flex items-center gap-2">
                                     <div className={`w-1.5 h-1.5 rounded-full ${t.type === 'income' ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                                    {FUND_SOURCES.find(f => f.value === t.fundSource)?.label}
+                                    {accounts.find(f => f.id === t.accountId)?.name || t.accountId}
                                   </span>
                                 )}
                               </span>
@@ -2778,13 +3028,13 @@ export default function App() {
                         <select 
                           className="bg-white border border-slate-200 rounded-lg px-4 py-3 text-xs font-bold uppercase tracking-widest outline-none focus:border-indigo-600"
                           onChange={(e) => {
-                            const updated = previewTransactions.map(t => ({ ...t, fundSource: e.target.value as FundSource }));
+                            const updated = previewTransactions.map(t => ({ ...t, accountId: e.target.value }));
                             setPreviewTransactions(updated);
                           }}
-                          defaultValue="bb_corrente"
                         >
-                          {FUND_SOURCES.map(f => (
-                            <option key={f.value} value={f.value}>{f.label}</option>
+                          <option value="" disabled>Conta em Lote</option>
+                          {accounts.map(f => (
+                            <option key={f.id} value={f.id}>{f.name}</option>
                           ))}
                         </select>
                         <select 
@@ -2839,16 +3089,16 @@ export default function App() {
                               </td>
                               <td className="px-6 py-4">
                                 <select 
-                                  value={t.fundSource} 
+                                  value={t.accountId || ''} 
                                   onChange={(e) => {
                                     const updated = [...previewTransactions];
-                                    updated[i].fundSource = e.target.value as FundSource;
+                                    updated[i].accountId = e.target.value;
                                     setPreviewTransactions(updated);
                                   }}
                                   className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-[10px] font-bold uppercase tracking-tight outline-none focus:border-emerald-600 w-full"
                                 >
-                                  {FUND_SOURCES.map(f => (
-                                    <option key={f.value} value={f.value}>{f.label}</option>
+                                  {accounts.map(f => (
+                                    <option key={f.id} value={f.id}>{f.name}</option>
                                   ))}
                                 </select>
                               </td>
@@ -3079,9 +3329,9 @@ export default function App() {
                       amount: parsedAmount,
                       type: modalType,
                       category: (modalType === 'transfer' ? 'transferencia' : formData.get('category')) as Category,
-                      fundSource: formData.get('fundSource') as FundSource,
-                      toFundSource: modalType === 'transfer' ? formData.get('toFundSource') as FundSource : undefined,
-                    });
+                      fundSource: formData.get('accountId') as string,
+                      toFundSource: modalType === 'transfer' ? formData.get('toAccountId') as string : undefined,
+                    } as any);
                   } catch (err: any) {
                     console.error("Erro crítico ao salvar:", err);
                     let displayMsg = "Tente novamente.";
@@ -3156,16 +3406,16 @@ export default function App() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1 italic">
-                        {modalType === 'transfer' ? '02. Conta de Origem' : '02. Origem do Recurso (Caixa)'}
+                        {modalType === 'transfer' ? '02. Conta de Origem' : '02. Conta Financeira'}
                       </label>
                       <select 
-                        name="fundSource" 
+                        name="accountId" 
                         required 
-                        defaultValue={editingTransaction?.fundSource}
+                        defaultValue={editingTransaction?.accountId}
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3.5 outline-none focus:border-emerald-600 transition-all font-bold text-xs uppercase tracking-widest"
                       >
-                        {FUND_SOURCES.map(source => (
-                          <option key={source.value} value={source.value}>{source.label}</option>
+                        {accounts.map(acc => (
+                          <option key={acc.id} value={acc.id}>{acc.name}</option>
                         ))}
                       </select>
                     </div>
@@ -3174,13 +3424,13 @@ export default function App() {
                       <div className="space-y-2">
                         <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest ml-1 italic font-serif">03. Conta de Destino</label>
                         <select 
-                          name="toFundSource" 
+                          name="toAccountId" 
                           required 
-                          defaultValue={editingTransaction?.toFundSource}
+                          defaultValue={editingTransaction?.toAccountId}
                           className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3.5 outline-none focus:border-indigo-600 transition-all font-bold text-xs uppercase tracking-widest"
                         >
-                          {FUND_SOURCES.map(source => (
-                            <option key={source.value} value={source.value}>{source.label}</option>
+                          {accounts.map(acc => (
+                            <option key={acc.id} value={acc.id}>{acc.name}</option>
                           ))}
                         </select>
                       </div>
@@ -3232,6 +3482,92 @@ export default function App() {
                     >
                       {isProcessing && <Loader2 size={16} className="animate-spin" />}
                       {editingTransaction ? 'Salvar Alterações' : 'Confirmar Registro'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showAccountModal && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[105]"
+              onClick={() => setShowAccountModal(false)}
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-md bg-white rounded-[2.5rem] p-0 z-[115] shadow-2xl overflow-y-auto border-t-[12px] border-orange-600"
+            >
+              <div className="p-8">
+                <header className="flex justify-between items-start mb-8">
+                  <div>
+                    <h2 className="text-2xl font-black text-slate-800 tracking-tighter mb-1 uppercase italic">Configurar Conta</h2>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Definição de Parâmetros Financeiros</p>
+                  </div>
+                  <button onClick={() => setShowAccountModal(false)} className="p-3 bg-slate-50 rounded-xl text-slate-300 hover:text-slate-600 transition-all">
+                    <X size={20} />
+                  </button>
+                </header>
+                
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  const formData = new FormData(e.currentTarget);
+                  await addAccount({
+                    name: formData.get('name') as string,
+                    balance: parseFloat(formData.get('balance') as string) || 0,
+                    color: formData.get('color') as string,
+                  });
+                }} className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome da Conta</label>
+                    <input 
+                      type="text" 
+                      name="name" 
+                      placeholder="EX: ESCOLA, PESSOAL, CANTINA..." 
+                      required 
+                      defaultValue={editingAccount?.name}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 outline-none focus:border-orange-500 transition-all font-bold text-xs uppercase tracking-widest placeholder:text-slate-200" 
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Saldo Inicial (R$)</label>
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      name="balance" 
+                      placeholder="0,00" 
+                      defaultValue={editingAccount?.balance || 0}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 outline-none focus:border-orange-500 transition-all font-mono font-black text-xl" 
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Cor de Identificação</label>
+                    <input 
+                      type="color" 
+                      name="color" 
+                      defaultValue={editingAccount?.color || '#ea580c'}
+                      className="w-full h-12 bg-slate-50 border border-slate-100 rounded-2xl px-2 py-2 outline-none cursor-pointer" 
+                    />
+                  </div>
+
+                  <div className="flex gap-4 pt-6">
+                    <button type="button" onClick={() => setShowAccountModal(false)} className="flex-1 py-4 font-black text-slate-400 hover:text-slate-600 text-[10px] uppercase tracking-widest transition-colors">Cancelar</button>
+                    <button 
+                      type="submit" 
+                      className="flex-1 py-4 font-black bg-orange-600 text-white rounded-2xl shadow-xl shadow-orange-100 hover:bg-orange-700 transition-all active:scale-95 uppercase text-[10px] tracking-widest"
+                    >
+                      Salvar Conta
                     </button>
                   </div>
                 </form>
@@ -3490,10 +3826,10 @@ export default function App() {
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Contas Permitidas</label>
                       <button 
                         onClick={() => {
-                          const allSources = FUND_SOURCES.map(s => s.value);
+                          const allIds = accounts.map(s => s.id);
                           setEditingPermissionsMember(prev => prev ? {
                             ...prev,
-                            permissions: { ...prev.permissions, fundSources: allSources }
+                            permissions: { ...prev.permissions, accountId: allIds }
                           } : null);
                         }}
                         className="text-[10px] font-black text-orange-600 uppercase tracking-widest"
@@ -3502,24 +3838,24 @@ export default function App() {
                       </button>
                     </div>
                     <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-                      {FUND_SOURCES.map(source => (
-                        <label key={source.value} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors group">
+                      {accounts.map(acc => (
+                        <label key={acc.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors group">
                           <input 
                             type="checkbox"
-                            checked={editingPermissionsMember.permissions?.fundSources?.includes(source.value) ?? true}
+                            checked={editingPermissionsMember.permissions?.accountId?.includes(acc.id) ?? true}
                             onChange={(e) => {
-                              const current = editingPermissionsMember.permissions?.fundSources ?? FUND_SOURCES.map(s => s.value);
+                              const current = editingPermissionsMember.permissions?.accountId ?? accounts.map(s => s.id);
                               const next = e.target.checked 
-                                ? [...current, source.value]
-                                : current.filter(v => v !== source.value);
+                                ? [...current, acc.id]
+                                : current.filter(v => v !== acc.id);
                               setEditingPermissionsMember({
                                 ...editingPermissionsMember,
-                                permissions: { ...editingPermissionsMember.permissions, fundSources: next }
+                                permissions: { ...editingPermissionsMember.permissions, accountId: next }
                               });
                             }}
                             className="w-4 h-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500"
                           />
-                          <span className="text-xs font-bold text-slate-600 group-hover:text-slate-900">{source.label}</span>
+                          <span className="text-xs font-bold text-slate-600 group-hover:text-slate-900">{acc.name}</span>
                         </label>
                       ))}
                     </div>
@@ -3530,7 +3866,7 @@ export default function App() {
                   <button 
                     onClick={() => updateMemberPermissions(editingPermissionsMember.email, editingPermissionsMember.permissions || {
                       categories: CATEGORIES.map(c => c.value),
-                      fundSources: FUND_SOURCES.map(s => s.value),
+                      accountId: accounts.map(s => s.id),
                       tabs: ['dashboard', 'transactions', 'debts', 'payables', 'reports']
                     })}
                     className="flex-1 bg-slate-900 hover:bg-slate-800 text-white py-5 rounded-3xl font-black uppercase text-xs tracking-widest shadow-xl shadow-slate-100 transition-all active:scale-95"

@@ -69,6 +69,30 @@ service cloud.firestore {
       );
     }
 
+    // --- accounts ---
+    match /accounts/{id} {
+      allow read: if isSignedIn() && (
+        resource.data.tenantId == request.auth.uid || 
+        isMemberOf(resource.data.tenantId)
+      );
+      allow write: if isSignedIn() && (
+        (request.method == 'create' && isOwnerOf(incoming().tenantId)) ||
+        (request.method != 'create' && isOwnerOf(resource.data.tenantId))
+      );
+    }
+
+    // --- transfers ---
+    match /transfers/{id} {
+      allow read: if isSignedIn() && (
+        resource.data.tenantId == request.auth.uid || 
+        isMemberOf(resource.data.tenantId)
+      );
+      allow write: if isSignedIn() && (
+        (request.method == 'create' && isOwnerOf(incoming().tenantId)) ||
+        (request.method != 'create' && isOwnerOf(resource.data.tenantId))
+      );
+    }
+
     // --- transactions ---
     match /transactions/{id} {
       allow read: if isSignedIn() && isMemberOf(resource.data.userId);
@@ -85,21 +109,18 @@ service cloud.firestore {
 
     // --- debts ---
     match /debts/{id} {
-      // Viewer cannot see debts
-      allow read: if isSignedIn() && isOwnerOf(resource.data.userId);
-      allow write: if isSignedIn() && isOwnerOf(resource.data.userId || incoming().userId);
+      // Members can see debts
+      allow read: if isSignedIn() && isMemberOf(resource.data.userId);
+      allow create: if isSignedIn() && isOwnerOf(incoming().userId);
+      allow update: if isSignedIn() && isOwnerOf(resource.data.userId) && (incoming().userId == resource.data.userId);
+      allow delete: if isSignedIn() && isOwnerOf(resource.data.userId);
     }
 
     // --- bills ---
     match /bills/{id} {
       allow read: if isSignedIn() && isMemberOf(resource.data.userId);
-      
-      allow create: if isSignedIn() && isOwnerOf(incoming().userId) &&
-                    isValidString(incoming().description, 200);
-                    
-      allow update: if isSignedIn() && isOwnerOf(resource.data.userId) &&
-                    incoming().userId == resource.data.userId;
-                    
+      allow create: if isSignedIn() && isOwnerOf(incoming().userId);
+      allow update: if isSignedIn() && isOwnerOf(resource.data.userId) && (incoming().userId == resource.data.userId);
       allow delete: if isSignedIn() && isOwnerOf(resource.data.userId);
     }
   }

@@ -8,14 +8,43 @@
         "amount": { "type": "number" },
         "type": { "type": "string", "enum": ["income", "expense", "transfer"] },
         "category": { "type": "string" },
-        "fundSource": { "type": "string" },
-        "toFundSource": { "type": "string", "description": "Mandatory for transfers" },
+        "accountId": { "type": "string" },
+        "toAccountId": { "type": "string", "description": "Mandatory for transfers" },
         "description": { "type": "string" },
         "date": { "type": "string", "format": "date" },
         "createdAt": { "type": "integer" },
-        "userId": { "type": "string" }
+        "userId": { "type": "string" },
+        "deleted": { "type": "boolean" }
       },
-      "required": ["amount", "type", "category", "fundSource", "description", "date", "createdAt", "userId"]
+      "required": ["amount", "type", "category", "accountId", "description", "date", "createdAt", "userId"]
+    },
+    "Account": {
+      "title": "Account",
+      "description": "A financial account (bank, cash, etc.) with a balance.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "balance": { "type": "number" },
+        "tenantId": { "type": "string" },
+        "createdAt": { "type": "integer" },
+        "color": { "type": "string" }
+      },
+      "required": ["name", "balance", "tenantId", "createdAt"]
+    },
+    "Transfer": {
+      "title": "Transfer",
+      "description": "A record of money moving between accounts.",
+      "type": "object",
+      "properties": {
+        "fromAccountId": { "type": "string" },
+        "toAccountId": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "format": "date" },
+        "description": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "createdAt": { "type": "integer" }
+      },
+      "required": ["fromAccountId", "toAccountId", "amount", "date", "description", "tenantId", "createdAt"]
     },
     "Debt": {
       "title": "Debt",
@@ -65,9 +94,17 @@
     }
   },
   "firestore": {
+    "accounts": {
+      "schema": "Account",
+      "description": "Collection of all financial accounts."
+    },
     "transactions": {
       "schema": "Transaction",
       "description": "Collection of all financial transactions."
+    },
+    "transfers": {
+      "schema": "Transfer",
+      "description": "Collection of all inter-account transfers."
     },
     "debts": {
       "schema": "Debt",

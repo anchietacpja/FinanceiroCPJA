@@ -27,6 +27,15 @@ export type FundSource =
   | 'pessoal' 
   | 'cantina';
 
+export interface Account {
+  id: string;
+  name: string;
+  balance: number;
+  tenantId: string;
+  createdAt: any;
+  color?: string;
+}
+
 export interface Transaction {
   id: string;
   date: string;
@@ -34,9 +43,21 @@ export interface Transaction {
   amount: number;
   type: 'income' | 'expense' | 'transfer';
   category: Category;      // O que é o gasto (Escola, Pessoal, Cantina)
-  fundSource: FundSource;  // De onde saiu o dinheiro (Caixa Escola, Banco, Pessoal, Cantina)
-  toFundSource?: FundSource; // Para transferências
+  accountId: string;       // ID da conta vinculada
+  toAccountId?: string;    // Para transferências
   userId: string;
+  createdAt: any;
+  deleted?: boolean;
+}
+
+export interface Transfer {
+  id: string;
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  date: string;
+  description: string;
+  tenantId: string;
   createdAt: any;
 }
 
@@ -85,9 +106,9 @@ export interface TeamMember {
   role: UserRole;
   tenantId: string;
   invitedAt: number;
-  permissions?: {
-    categories?: Category[];
-    fundSources?: FundSource[];
-    tabs?: string[];
-  };
+    permissions?: {
+      categories?: Category[];
+      accountId?: string[];
+      tabs?: string[];
+    };
 }
