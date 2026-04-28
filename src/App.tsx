@@ -45,7 +45,32 @@ import {
   TrendingUp,
   ArrowLeftRight,
   ChevronRight,
+  Image as ImageIcon,
 } from 'lucide-react';
+
+const SafeLogo = ({ src, alt, className, fallbackIcon: Fallback = School }: { src: string; alt: string; className?: string; fallbackIcon?: any }) => {
+  const [error, setError] = useState(false);
+  
+  if (error || !src) {
+    return (
+      <div className={`${className} flex items-center justify-center bg-slate-50 text-slate-300`}>
+        <Fallback size={24} strokeWidth={1} />
+      </div>
+    );
+  }
+
+  return (
+    <img 
+      src={src} 
+      alt={alt} 
+      className={className} 
+      onError={() => {
+        console.warn(`Failed to load logo: ${src}`);
+        setError(true);
+      }} 
+    />
+  );
+};
 import { motion, AnimatePresence } from 'motion/react';
 import { Transaction, Category, FundSource, Debt, Bill, UserRole, TeamMember, Account, Transfer } from './types';
 import { CATEGORIES, FUND_SOURCES, LOGO_ANCHIETA, LOGO_CPJA, SCHOOL_NAME, PLATFORM_NAME, APP_LOGO } from './constants';
@@ -1016,7 +1041,7 @@ export default function App() {
               {/* Creator Highlight Box */}
               <div className="bg-slate-800/80 backdrop-blur-xl border border-white/10 p-6 rounded-[2rem] shadow-2xl flex items-center gap-5 group hover:bg-slate-800 transition-all">
                 <div className="w-14 h-14 bg-white rounded-2xl p-2.5 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                  <img src={APP_LOGO} className="w-full h-full object-contain" alt="Creator Logo" />
+                  <SafeLogo src={APP_LOGO} className="w-full h-full object-contain" alt="Creator Logo" fallbackIcon={Target} />
                 </div>
                 <div>
                   <p className="text-[10px] font-black uppercase text-orange-500 tracking-[0.4em] leading-none mb-1.5">Plataforma</p>
@@ -1030,13 +1055,13 @@ export default function App() {
                     whileHover={{ scale: 1.05 }}
                     className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-2xl overflow-hidden border border-slate-100 p-2"
                   >
-                    <img src={LOGO_ANCHIETA} alt="School Logo 1" className="w-full h-full object-contain" />
+                    <SafeLogo src={LOGO_ANCHIETA} alt="School Logo 1" className="w-full h-full object-contain" fallbackIcon={GraduationCap} />
                   </motion.div>
                   <motion.div 
                     whileHover={{ scale: 1.05 }}
                     className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-2xl overflow-hidden border border-slate-100 p-2"
                   >
-                    <img src={LOGO_CPJA} alt="School Logo 2" className="w-full h-full object-contain" />
+                    <SafeLogo src={LOGO_CPJA} alt="School Logo 2" className="w-full h-full object-contain" fallbackIcon={School} />
                   </motion.div>
                 </div>
                 <div className="h-12 w-[1px] bg-white/20"></div>
@@ -1226,7 +1251,7 @@ export default function App() {
               >
                 <div className="flex items-center gap-3">
                   <div className="bg-white rounded-2xl p-2.5 flex items-center justify-center shadow-lg border border-slate-100">
-                    <img src={APP_LOGO} className="w-8 h-8 object-contain" alt="Nokite Logo" />
+                    <SafeLogo src={APP_LOGO} className="w-8 h-8 object-contain" alt="Nokite Logo" fallbackIcon={Target} />
                   </div>
                   <div>
                     <p className="text-[9px] font-black uppercase text-white/40 tracking-[0.3em] leading-none mb-1.5">Arquitetura de Software</p>
@@ -1267,10 +1292,10 @@ export default function App() {
            <div className="flex items-center gap-3">
              <div className="flex -space-x-2">
                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-md overflow-hidden border border-slate-100 p-1 hover:z-10 transition-transform hover:scale-110">
-                  <img src={LOGO_ANCHIETA} alt="School Logo" title="Colégio Anchieta" className="w-full h-full object-contain" />
+                  <SafeLogo src={LOGO_ANCHIETA} alt="School Logo" className="w-full h-full object-contain" fallbackIcon={GraduationCap} />
                </div>
                <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-md overflow-hidden border border-slate-100 p-1 hover:z-10 transition-transform hover:scale-110">
-                  <img src={LOGO_CPJA} alt="CPJA Logo" title="CPJA" className="w-full h-full object-contain" />
+                  <SafeLogo src={LOGO_CPJA} alt="CPJA Logo" className="w-full h-full object-contain" fallbackIcon={School} />
                </div>
              </div>
              <div>
@@ -1378,7 +1403,7 @@ export default function App() {
           <div className="hidden md:block pt-4 border-t border-slate-100 mt-2 bg-white/50 rounded-t-2xl -mx-4 px-4 pb-2 group/dev">
             <div className="flex flex-col items-center gap-1.5 transition-all duration-500">
                <div className="w-8 h-8 bg-white rounded-lg p-1 border border-slate-200 shadow-sm group-hover/dev:shadow-md transition-all group-hover/dev:scale-105">
-                 <img src={APP_LOGO} className="w-full h-full object-contain" alt="Nokite Logo" />
+                 <SafeLogo src={APP_LOGO} className="w-full h-full object-contain" alt="Nokite Logo" fallbackIcon={Target} />
                </div>
                <div className="text-center">
                  <p className="text-[6px] font-black text-slate-400 uppercase tracking-[0.5em] mb-0.5 opacity-60 leading-none">Desenvolvido por</p>
