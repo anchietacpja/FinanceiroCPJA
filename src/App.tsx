@@ -489,7 +489,10 @@ export default function App() {
     const currentYear = now.getFullYear();
 
     return authorizedTransactions.filter(t => {
-      const tDate = new Date(t.date + 'T00:00:00');
+      const dateStr = (t.date || '').includes('/') ? normalizeDate(t.date) : (t.date || '');
+      const tDate = new Date(dateStr + 'T12:00:00');
+      if (isNaN(tDate.getTime())) return periodFilter === 'all';
+      
       if (periodFilter === 'all') return true;
       if (periodFilter === 'thisMonth') {
         return tDate.getMonth() === currentMonth && tDate.getFullYear() === currentYear;
@@ -503,27 +506,56 @@ export default function App() {
     });
   }, [authorizedTransactions, periodFilter]);
 
+  // Métricas do período filtrado
+  const periodMetrics = useMemo(() => {
+    const income = periodFilteredTransactions
+      .filter(t => t.type === 'income')
+      .reduce((acc, t) => acc + (t.amount || 0), 0);
+    
+    const expense = periodFilteredTransactions
+      .filter(t => t.type === 'expense')
+      .reduce((acc, t) => acc + (t.amount || 0), 0);
+    
+    const transfers = periodFilteredTransactions
+      .filter(t => t.type === 'transfer')
+      .reduce((acc, t) => acc + (t.amount || 0), 0);
+
+    return { income, expense, transfers, net: income - expense };
+  }, [periodFilteredTransactions]);
+
   // Dados para o Gráfico de Fluxo de Caixa Diário
   const chartData = useMemo(() => {
-    const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    const now = new Date();
+    let year = now.getFullYear();
+    let month = now.getMonth();
+
+    if (periodFilter === 'lastMonth') {
+      month = month === 0 ? 11 : month - 1;
+      year = month === 11 ? year - 1 : year;
+    }
+
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
     const data = Array.from({ length: daysInMonth }, (_, i) => ({
       day: i + 1,
       income: 0,
       expense: 0
     }));
 
-    const now = new Date();
     periodFilteredTransactions.forEach(t => {
-      const tDate = new Date(t.date + 'T00:00:00');
+      const dateStr = (t.date || '').includes('/') ? (t.date.split('/').reverse().join('-')) : (t.date || '');
+      const tDate = new Date(dateStr + 'T12:00:00');
+      if (isNaN(tDate.getTime())) return;
+
       const day = tDate.getDate();
-      if (tDate.getMonth() === now.getMonth() && tDate.getFullYear() === now.getFullYear()) {
-        if (t.type === 'income') data[day - 1].income += t.amount;
-        if (t.type === 'expense') data[day - 1].expense += t.amount;
+      // Only include in chart if it belongs to the month/year we are plotting
+      if (tDate.getMonth() === month && tDate.getFullYear() === year) {
+        if (t.type === 'income' && data[day - 1]) data[day - 1].income += t.amount;
+        if (t.type === 'expense' && data[day - 1]) data[day - 1].expense += t.amount;
       }
     });
 
     return data;
-  }, [periodFilteredTransactions]);
+  }, [periodFilteredTransactions, periodFilter]);
 
   // Totais por Origem de Recurso (Saldo real de cada "Carteira")
   // Aqui estamos somando os movimentos. Em uma app real, poderíamos ter um saldo inicial configurável.
@@ -907,7 +939,15 @@ export default function App() {
   };
 
   const addAccount = async (a: Omit<Account, 'id' | 'createdAt' | 'tenantId'>) => {
-    if (!user || userRole !== 'owner') return;
+    if (!user) return;
+    if (userRole === 'viewer') {
+      alert('Acesso restrito: Visualizadores não podem criar contas.');
+      return;
+    }
+    if (userRole !== 'owner') {
+      alert('Apenas proprietários podem gerenciar contas.');
+      return;
+    }
     try {
       if (editingAccount) {
         await updateDoc(doc(db, 'accounts', editingAccount.id), {
@@ -929,7 +969,15 @@ export default function App() {
   };
 
   const deleteAccount = async (id: string) => {
-    if (!user || userRole !== 'owner') return;
+    if (!user) return;
+    if (userRole === 'viewer') {
+      alert('Acesso restrito: Visualizadores não podem excluir contas.');
+      return;
+    }
+    if (userRole !== 'owner') {
+      alert('Apenas proprietários podem excluir contas.');
+      return;
+    }
     // Check if account has transactions
     const hasTransactions = transactions.some(t => t.accountId === id);
     if (hasTransactions) {
@@ -1003,6 +1051,10 @@ export default function App() {
   };
 
   const processImport = () => {
+    if (userRole === 'viewer') {
+      alert('Acesso restrito: Visualizadores não podem importar dados.');
+      return;
+    }
     setIsProcessing(true);
     // Simula um pequeno delay para feedback visual de "inteligência processando"
     setTimeout(() => {
@@ -1036,6 +1088,10 @@ export default function App() {
 
   const saveImported = async () => {
     if (!user) return;
+    if (userRole === 'viewer') {
+      alert('Acesso restrito: Visualizadores não podem salvar importações.');
+      return;
+    }
     try {
       for (const t of previewTransactions) {
         await addTransaction(t as any);
@@ -1608,7 +1664,9 @@ export default function App() {
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                 <div>
                   <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-1">Fluxo de Caixa Mensal</h3>
-                  <p className="text-xs text-slate-400 font-medium tracking-tight">Histórico diário de entradas e saídas (Mês Atual)</p>
+                  <p className="text-xs text-slate-400 font-medium tracking-tight">
+                    Histórico diário de entradas e saídas ({periodFilter === 'all' ? 'Tudo' : periodFilter === 'thisMonth' ? 'Mês Atual' : 'Mês Passado'})
+                  </p>
                 </div>
                 <div className="flex items-center gap-6">
                   <div className="flex items-center gap-2">
@@ -1651,6 +1709,7 @@ export default function App() {
                     <Tooltip 
                       contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '12px' }}
                       labelStyle={{ fontSize: '10px', fontWeight: 900, textTransform: 'uppercase', marginBottom: '4px', color: '#64748b' }}
+                      formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, '']}
                     />
                     <Area 
                       type="monotone" 
@@ -1672,19 +1731,66 @@ export default function App() {
                 </ResponsiveContainer>
               </div>
             </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {/* Consolidated Total Balance */}
-                <div className="bg-emerald-600 rounded-3xl p-10 text-white shadow-[0_20px_50px_rgba(16,185,129,0.3)] overflow-hidden relative group border-2 border-emerald-500">
-                  <div className="absolute top-0 right-0 p-4 opacity-20">
-                    <Wallet size={80} />
-                  </div>
-                  <p className="text-[11px] font-black uppercase tracking-[0.3em] mb-2 opacity-80 italic">Saldo Consolidado</p>
-                  <p className="text-3xl font-mono font-black tracking-tighter">
-                    R$ {(Object.values(balances) as number[]).reduce((acc: number, b: number) => acc + b, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </p>
-                  <p className="text-[10px] mt-4 font-black uppercase opacity-60">Soma de todas as contas</p>
-                </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* Entradas Totais do Período */}
+              <div className="bg-white border-2 border-slate-900 rounded-3xl p-8 text-slate-800 shadow-[8px_8px_0px_0px_rgba(16,185,129,1)] hover:shadow-[12px_12px_0px_0px_rgba(16,185,129,1)] transition-all relative overflow-hidden group">
+                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em] mb-2 italic">Total Entradas ({periodFilter === 'all' ? 'Histórico' : periodFilter === 'thisMonth' ? 'Mês' : 'Anterior'})</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-xs font-bold text-slate-400">R$</span>
+                  <p className="text-3xl font-mono font-black tracking-tighter text-slate-900">
+                    {periodMetrics.income.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div className="mt-4 flex items-center gap-2">
+                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Soma de todos os recebimentos</p>
+                </div>
+              </div>
+
+              {/* Saídas Totais do Período */}
+              <div className="bg-white border-2 border-slate-900 rounded-3xl p-8 text-slate-800 shadow-[8px_8px_0px_0px_rgba(239,68,68,1)] hover:shadow-[12px_12px_0px_0px_rgba(239,68,68,1)] transition-all relative overflow-hidden group">
+                <p className="text-[10px] font-black text-red-500 uppercase tracking-[0.3em] mb-2 italic">Total Saídas ({periodFilter === 'all' ? 'Histórico' : periodFilter === 'thisMonth' ? 'Mês' : 'Anterior'})</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-xs font-bold text-slate-400">R$</span>
+                  <p className="text-3xl font-mono font-black tracking-tighter text-slate-900">
+                    {periodMetrics.expense.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div className="mt-4 flex items-center gap-2">
+                   <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total de despesas liquidadas</p>
+                </div>
+              </div>
+
+              {/* Resultado do Período */}
+              <div className={`rounded-3xl p-8 text-white shadow-[8px_8px_0px_0px_rgba(15,23,42,1)] transition-all relative overflow-hidden group border-2 border-slate-900 ${periodMetrics.net >= 0 ? 'bg-slate-900' : 'bg-red-900'}`}>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-2 italic opacity-60">Fluxo Líquido</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-xs font-bold opacity-40">R$</span>
+                  <p className="text-3xl font-mono font-black tracking-tighter">
+                    {periodMetrics.net.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div className="mt-4 flex items-center gap-2">
+                   <div className={`w-1.5 h-1.5 rounded-full ${periodMetrics.net >= 0 ? 'bg-emerald-400 animate-pulse' : 'bg-white h-0.5 w-3'}`} />
+                   <p className="text-[9px] font-black uppercase tracking-widest opacity-60">Superavit / Deficit</p>
+                </div>
+              </div>
+
+              {/* Consolidated Total Balance */}
+              <div className="bg-emerald-600 rounded-3xl p-8 text-white shadow-[8px_8px_0px_0px_rgba(5,150,105,1)] overflow-hidden relative group border-2 border-emerald-500">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-2 opacity-80 italic">Patrimônio Global</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-xs font-bold opacity-40">R$</span>
+                  <p className="text-3xl font-mono font-black tracking-tighter">
+                    {(Object.values(balances) as number[]).reduce((acc: number, b: number) => acc + b, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <p className="text-[9px] mt-4 font-black uppercase opacity-60 leading-tight">Liquidez imediata em todas as contas</p>
+              </div>
+            </div>
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {/* Receita Acadêmica - Tuition Category */}
                 {(userRole === 'owner' || (userPermissions?.categories?.includes('tuition') ?? true)) && (
                   <div className="bg-orange-500 rounded-3xl p-10 text-white shadow-[0_20px_50px_rgba(249,115,22,0.3)] overflow-hidden relative group border-2 border-orange-400">
@@ -1842,21 +1948,25 @@ export default function App() {
                   </div>
                 </div>
 
-                <button 
-                  onClick={() => setShowAddModal(true)}
-                  className="w-full bg-white border border-slate-200 p-6 rounded-2xl flex items-center justify-between hover:border-blue-600 transition-all group"
-                >
-                  <div className="text-left">
-                    <h4 className="font-bold text-slate-800 text-sm">Conciliar Contas</h4>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Balanceamento de caixa</p>
-                  </div>
-                  <div className="w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
-                    <ArrowRight size={20} />
-                  </div>
-                </button>
+              <div className="flex flex-col gap-4">
+                {userRole !== 'viewer' && (
+                  <button 
+                    onClick={() => setShowAddModal(true)}
+                    className="w-full bg-white border border-slate-200 p-6 rounded-2xl flex items-center justify-between hover:border-blue-600 transition-all group"
+                  >
+                    <div className="text-left">
+                      <h4 className="font-bold text-slate-800 text-sm">Conciliar Contas</h4>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Balanceamento de caixa</p>
+                    </div>
+                    <div className="w-10 h-10 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+                      <ArrowRight size={20} />
+                    </div>
+                  </button>
+                )}
               </div>
             </div>
           </div>
+        </div>
         ) : activeTab === 'accounts' ? (
           <div className="space-y-6">
             <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
@@ -2171,7 +2281,7 @@ export default function App() {
             </div>
 
             {/* Header section with Bento style summary */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+              <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
               <div>
                 <motion.div 
                   initial={{ opacity: 0, x: -20 }}
@@ -2185,13 +2295,15 @@ export default function App() {
                 </motion.div>
                 <p className="text-slate-500 font-medium font-serif max-w-md">Gestão estratégica de compromissos financeiros de longo prazo e crédito.</p>
               </div>
-              <button 
-                onClick={() => setShowDebtModal(true)}
-                className="bg-slate-900 hover:bg-slate-800 text-white font-black py-4 px-10 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-2xl shadow-slate-200 active:scale-95 uppercase text-[10px] tracking-[0.2em]"
-              >
-                <Plus size={20} strokeWidth={3} />
-                Anotar Nova Dívida
-              </button>
+              {userRole !== 'viewer' && (
+                <button 
+                  onClick={() => setShowDebtModal(true)}
+                  className="bg-slate-900 hover:bg-slate-800 text-white font-black py-4 px-10 rounded-2xl flex items-center justify-center gap-2 transition-all shadow-2xl shadow-slate-200 active:scale-95 uppercase text-[10px] tracking-[0.2em]"
+                >
+                  <Plus size={20} strokeWidth={3} />
+                  Anotar Nova Dívida
+                </button>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -2346,104 +2458,106 @@ export default function App() {
                           </div>
                           <div className="mt-3 h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                              <motion.div 
-                               initial={{ width: 0 }}
-                               animate={{ width: `${100 - (debt.remainingInstallments / (debt.installments || debt.remainingInstallments)) * 100}%` }}
-                               className="h-full bg-orange-500 rounded-full"
+                                initial={{ width: 0 }}
+                                animate={{ width: `${100 - (debt.remainingInstallments / (debt.installments || debt.remainingInstallments)) * 100}%` }}
+                                className="h-full bg-orange-500 rounded-full"
                              />
                           </div>
                        </div>
                     )}
 
-                    <div className="mt-6 flex gap-3">
-                      <button 
-                        onClick={async () => {
-                          const newVal = prompt('Reduzir saldo devedor em (R$):', '0');
-                          if (newVal !== null) {
-                            const val = parseFloat(newVal.replace(',', '.'));
-                            if (isNaN(val) || val <= 0) {
-                              alert("Por favor, insira um valor válido maior que zero.");
-                              return;
+                    {userRole !== 'viewer' && (
+                      <div className="mt-6 flex gap-3">
+                        <button 
+                          onClick={async () => {
+                            const newVal = prompt('Reduzir saldo devedor em (R$):', '0');
+                            if (newVal !== null) {
+                              const val = parseFloat(newVal.replace(',', '.'));
+                              if (isNaN(val) || val <= 0) {
+                                alert("Por favor, insira um valor válido maior que zero.");
+                                return;
+                              }
+                              
+                              // Seleção de conta simplificada por prompt para não quebrar o fluxo mobile
+                              const accountNames = accounts.map((a, i) => `${i + 1}: ${a.name}`).join('\n');
+                              const accChoice = prompt(`Pagar com qual conta?\n\n${accountNames}\n\nDigite o número:`, '1');
+                              
+                              const accIdx = parseInt(accChoice || '1') - 1;
+                              const selectedAccount = accounts[accIdx];
+                              
+                              if (!selectedAccount) {
+                                alert("Conta não localizada. Pagamento cancelado.");
+                                return;
+                              }
+
+                              const reduced = Math.max(0, debt.totalAmount - val);
+                              const remaining = debt.remainingInstallments ? Math.max(0, debt.remainingInstallments - 1) : undefined;
+                              
+                              try {
+                                // Criar transação de saída
+                                await addTransaction({
+                                  date: new Date().toISOString().split('T')[0],
+                                  description: `PARCELA: ${debt.description}`,
+                                  amount: val,
+                                  type: 'expense',
+                                  category: 'folha', // ou 'outros', mas folha/manutencao costuma ser divida
+                                  accountId: selectedAccount.id,
+                                });
+
+                                await updateDebt(debt.id, { 
+                                   totalAmount: reduced,
+                                   remainingInstallments: remaining,
+                                   status: reduced <= 0 ? 'paid' : 'active'
+                                });
+                                
+                                addNotification(`Parcela de R$ ${val} paga com ${selectedAccount.name}`, "success");
+                              } catch (error) {
+                                console.error(error);
+                              }
                             }
-                            
-                            // Seleção de conta simplificada por prompt para não quebrar o fluxo mobile
+                          }}
+                          className="flex-1 py-4 bg-slate-900 hover:bg-black text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-xl transition-all shadow-xl shadow-slate-200 active:scale-95 flex items-center justify-center gap-2"
+                        >
+                          <CreditCard size={14} />
+                          Pagar Parcela
+                        </button>
+                        <button 
+                          onClick={() => {
+                            const confirmPay = window.confirm(`Deseja quitar totalmente esta dívida?\n\nValor: R$ ${debt.totalAmount.toLocaleString('pt-BR')}`);
+                            if (!confirmPay) return;
+
                             const accountNames = accounts.map((a, i) => `${i + 1}: ${a.name}`).join('\n');
                             const accChoice = prompt(`Pagar com qual conta?\n\n${accountNames}\n\nDigite o número:`, '1');
-                            
                             const accIdx = parseInt(accChoice || '1') - 1;
                             const selectedAccount = accounts[accIdx];
-                            
+
                             if (!selectedAccount) {
-                              alert("Conta não localizada. Pagamento cancelado.");
+                              alert("Conta não localizada. Quitação cancelada.");
                               return;
                             }
 
-                            const reduced = Math.max(0, debt.totalAmount - val);
-                            const remaining = debt.remainingInstallments ? Math.max(0, debt.remainingInstallments - 1) : undefined;
-                            
-                            try {
-                              // Criar transação de saída
-                              await addTransaction({
-                                date: new Date().toISOString().split('T')[0],
-                                description: `PARCELA: ${debt.description}`,
-                                amount: val,
-                                type: 'expense',
-                                category: 'folha', // ou 'outros', mas folha/manutencao costuma ser divida
-                                accountId: selectedAccount.id,
-                              });
-
-                              await updateDebt(debt.id, { 
-                                 totalAmount: reduced,
-                                 remainingInstallments: remaining,
-                                 status: reduced <= 0 ? 'paid' : 'active'
-                              });
-                              
-                              addNotification(`Parcela de R$ ${val} paga com ${selectedAccount.name}`, "success");
-                            } catch (error) {
-                              console.error(error);
-                            }
-                          }
-                        }}
-                        className="flex-1 py-4 bg-slate-900 hover:bg-black text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-xl transition-all shadow-xl shadow-slate-200 active:scale-95 flex items-center justify-center gap-2"
-                      >
-                        <CreditCard size={14} />
-                        Pagar Parcela
-                      </button>
-                      <button 
-                        onClick={() => {
-                          const confirmPay = window.confirm(`Deseja quitar totalmente esta dívida?\n\nValor: R$ ${debt.totalAmount.toLocaleString('pt-BR')}`);
-                          if (!confirmPay) return;
-
-                          const accountNames = accounts.map((a, i) => `${i + 1}: ${a.name}`).join('\n');
-                          const accChoice = prompt(`Pagar com qual conta?\n\n${accountNames}\n\nDigite o número:`, '1');
-                          const accIdx = parseInt(accChoice || '1') - 1;
-                          const selectedAccount = accounts[accIdx];
-
-                          if (!selectedAccount) {
-                            alert("Conta não localizada. Quitação cancelada.");
-                            return;
-                          }
-
-                          (async () => {
-                            try {
-                              await addTransaction({
-                                date: new Date().toISOString().split('T')[0],
-                                description: `QUITAÇÃO: ${debt.description}`,
-                                amount: debt.totalAmount,
-                                type: 'expense',
-                                category: 'folha',
-                                accountId: selectedAccount.id,
-                              });
-                              await updateDebt(debt.id, { totalAmount: 0, status: 'paid', remainingInstallments: 0 });
-                              addNotification(`Dívida quitada com ${selectedAccount.name}`, "success");
-                            } catch (e) { console.error(e); }
-                          })();
-                        }}
-                        className="px-6 py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-100 transition-all flex items-center justify-center"
-                        title="Quitar"
-                      >
-                        <CheckCircle2 size={20} strokeWidth={3} />
-                      </button>
-                    </div>
+                            (async () => {
+                              try {
+                                await addTransaction({
+                                  date: new Date().toISOString().split('T')[0],
+                                  description: `QUITAÇÃO: ${debt.description}`,
+                                  amount: debt.totalAmount,
+                                  type: 'expense',
+                                  category: 'folha',
+                                  accountId: selectedAccount.id,
+                                });
+                                await updateDebt(debt.id, { totalAmount: 0, status: 'paid', remainingInstallments: 0 });
+                                addNotification(`Dívida quitada com ${selectedAccount.name}`, "success");
+                              } catch (e) { console.error(e); }
+                            })();
+                          }}
+                          className="px-6 py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-100 transition-all flex items-center justify-center"
+                          title="Quitar"
+                        >
+                          <CheckCircle2 size={20} strokeWidth={3} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))
               )}
