@@ -88,6 +88,7 @@ export interface Bill {
   dueDate: string;
   category: Category;
   status: BillStatus;
+  billType: 'fixed' | 'variable';
   userId: string;
   createdAt: any;
 }

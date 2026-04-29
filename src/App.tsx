@@ -77,6 +77,7 @@ const SafeLogo = ({ src, alt, className, fallbackIcon: Fallback = School }: { sr
         alt={alt} 
         className={`${className} ${loading ? 'opacity-0' : 'opacity-100'}`} 
         onLoad={() => setLoading(false)}
+        referrerPolicy="no-referrer"
         onError={(e) => {
           console.error(`Failed to load logo: ${src}`, e);
           setError(true);
@@ -91,7 +92,7 @@ import { Transaction, Category, FundSource, Debt, Bill, UserRole, TeamMember, Ac
 import { CATEGORIES, FUND_SOURCES, LOGO_ANCHIETA, LOGO_CPJA, SCHOOL_NAME, PLATFORM_NAME, APP_LOGO } from './constants';
 import { auth, db, signInWithGoogle, loginWithEmail, registerWithEmail, createCollaboratorAccount, logout, handleFirestoreError } from './lib/firebase';
 import { exportTransactionsToCSV } from './lib/export';
-import { learnCategories, suggestCategory, parseStatementLine } from './lib/intelligence';
+import { learnCategories, suggestCategory, parseStatementLine, normalizeDate } from './lib/intelligence';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { GoogleGenAI, Type } from "@google/genai";
 import { 
@@ -178,11 +179,11 @@ export default function App() {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-1.5-pro",
         contents: [
           {
             parts: [
-              { text: "Extraia todas as transações deste extrato bancário. Retorne um JSON com um array de objetos contendo: date (string DD/MM/AAAA), description (string), amount (number positivo), type ('income' ou 'expense'). Ignore cabeçalhos e rodapés." },
+              { text: "Extraia todas as transações deste extrato bancário. Retorne um JSON com um array de objetos contendo: date (string AAAA-MM-DD), description (string), amount (number positivo), type ('income' ou 'expense'). Importante: Converta as datas para o formato ISO AAAA-MM-DD. Ignore cabeçalhos e rodapés." },
               { inlineData: { data: base64.split(',')[1], mimeType: "application/pdf" } }
             ]
           }
@@ -213,8 +214,10 @@ export default function App() {
       const data = JSON.parse(response.text);
       const knowledge = learnCategories(transactions);
       
+      // Garante que as datas estão normalizadas mesmo que a IA falhe em retornar AAAA-MM-DD
       const newTxs = data.transactions.map((t: any) => ({
         ...t,
+        date: t.date.includes('/') ? normalizeDate(t.date) : t.date,
         category: suggestCategory(t.description, knowledge),
         accountId: accounts[0]?.id || 'default'
       }));
@@ -537,7 +540,7 @@ export default function App() {
   const balances = useMemo(() => {
     const b: Record<string, number> = {};
     accounts.forEach(acc => {
-      b[acc.id] = 0;
+      b[acc.id] = acc.balance || 0;
     });
 
     authorizedTransactions.forEach(t => {
@@ -590,6 +593,31 @@ export default function App() {
     };
   }, [periodFilteredTransactions, debts]);
 
+  // Métricas da Agenda
+  const agendaMetrics = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const plannedThisMonth = bills.filter(b => {
+      const dateStr = (b.dueDate || '').includes('/') ? normalizeDate(b.dueDate) : (b.dueDate || '');
+      const d = new Date(dateStr + 'T12:00:00');
+      if (isNaN(d.getTime())) return false;
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    }).reduce((acc, b) => acc + b.amount, 0);
+
+    const spentPreviousMonths = authorizedTransactions.filter(t => {
+      if (t.type !== 'expense') return false;
+      const dateStr = (t.date || '').includes('/') ? normalizeDate(t.date) : (t.date || '');
+      const d = new Date(dateStr + 'T12:00:00');
+      if (isNaN(d.getTime())) return false;
+      const isBeforeCurrentMonth = d.getFullYear() < currentYear || (d.getFullYear() === currentYear && d.getMonth() < currentMonth);
+      return isBeforeCurrentMonth;
+    }).reduce((acc, t) => acc + t.amount, 0);
+
+    return { plannedThisMonth, spentPreviousMonths };
+  }, [bills, authorizedTransactions]);
+
   const filteredTransactions = useMemo(() => {
     return authorizedTransactions.filter(t => {
       const matchesSearch = t.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -618,8 +646,9 @@ export default function App() {
       if (editingTransaction) {
         const docRef = doc(db, 'transactions', editingTransaction.id);
         console.log("Atualizando transação existente:", editingTransaction.id);
+        const normalizedDateStr = t.date.includes('/') ? normalizeDate(t.date) : t.date;
         const updateData: any = {
-          date: t.date,
+          date: normalizedDateStr,
           description: t.description,
           amount: t.amount,
           type: t.type,
@@ -635,8 +664,9 @@ export default function App() {
         setEditingTransaction(null);
         addNotification("Transação atualizada com sucesso!", "success");
       } else {
+        const normalizedDateStr = t.date.includes('/') ? normalizeDate(t.date) : t.date;
         const cleanData: any = {
-          date: t.date,
+          date: normalizedDateStr,
           description: t.description,
           amount: t.amount,
           type: t.type,
@@ -839,14 +869,17 @@ export default function App() {
       return;
     }
     try {
+      const normalizedDueDate = (b.dueDate || '').includes('/') ? normalizeDate(b.dueDate) : (b.dueDate || '');
       if (editingBill) {
         await updateDoc(doc(db, 'bills', editingBill.id), {
           ...b,
+          dueDate: normalizedDueDate
         });
         setEditingBill(null);
       } else {
         const cleanData = {
           ...b,
+          dueDate: normalizedDueDate,
           userId: currentTenantId,
           createdAt: serverTimestamp(),
         };
@@ -2044,7 +2077,17 @@ export default function App() {
                           <td className="px-8 py-6 border-r border-slate-100">
                             <div className="flex flex-col">
                               <span className="font-black text-slate-900 text-sm mb-0.5 tracking-tight uppercase italic">{t.description}</span>
-                              <span className="text-[10px] text-slate-400 font-mono font-black border-l-2 border-slate-200 pl-2">{new Date(t.date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+                              <span className="text-[10px] text-slate-400 font-mono font-black border-l-2 border-slate-200 pl-2">
+                                {(() => {
+                                  try {
+                                    const dStr = (t.date || '').includes('/') ? normalizeDate(t.date) : (t.date || '');
+                                    const dObj = new Date(dStr + 'T12:00:00');
+                                    return isNaN(dObj.getTime()) ? (t.date || '---') : dObj.toLocaleDateString('pt-BR');
+                                  } catch (e) {
+                                    return t.date || '---';
+                                  }
+                                })()}
+                              </span>
                             </div>
                           </td>
                           <td className="px-8 py-6">
@@ -2427,6 +2470,39 @@ export default function App() {
               )}
             </div>
 
+            {/* Resume / Summary */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mx-4 md:mx-0">
+               <div className="bg-white border-2 border-slate-900 rounded-[2rem] p-8 relative overflow-hidden shadow-[8px_8px_0px_0px_rgba(15,23,42,1)]">
+                 <div className="flex items-center gap-3 mb-4">
+                   <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
+                     <Calendar size={18} />
+                   </div>
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Previsão de Saída (Mês Atual)</p>
+                 </div>
+                 <p className="text-3xl font-mono font-black text-slate-900 tracking-tighter">
+                   R$ {agendaMetrics.plannedThisMonth.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                 </p>
+                 <p className="text-[9px] mt-4 font-black text-slate-400 uppercase tracking-widest leading-relaxed">
+                   Baseado em todas as contas agendadas <br /> para o mês de {new Date().toLocaleDateString('pt-BR', { month: 'long' })}.
+                 </p>
+               </div>
+
+               <div className="bg-slate-900 border-2 border-slate-900 rounded-[2rem] p-8 relative overflow-hidden shadow-[8px_8px_0px_0px_rgba(249,115,22,1)]">
+                 <div className="flex items-center gap-3 mb-4">
+                   <div className="w-8 h-8 bg-slate-800 rounded-lg flex items-center justify-center text-orange-500">
+                     <TrendingUp size={18} />
+                   </div>
+                   <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Executado (Meses Anteriores)</p>
+                 </div>
+                 <p className="text-3xl font-mono font-black text-white tracking-tighter">
+                   R$ {agendaMetrics.spentPreviousMonths.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                 </p>
+                 <p className="text-[9px] mt-4 font-black text-slate-500 uppercase tracking-widest leading-relaxed">
+                   Soma de todas as despesas liquidadas <br /> antes do início deste mês.
+                 </p>
+               </div>
+            </div>
+
             <div className="grid grid-cols-1 gap-6 md:gap-8">
               {authorizedBills.length === 0 ? (
                 <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-[2rem] md:rounded-[3rem] p-12 md:p-24 text-center group mx-4 md:mx-0">
@@ -2469,6 +2545,9 @@ export default function App() {
                                  {bill.status === 'paid' && (
                                    <span className="bg-emerald-500 text-white text-[7px] md:text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-widest shrink-0">Pago</span>
                                  )}
+                                 <span className={`text-[7px] md:text-[8px] font-black px-1.5 py-0.5 rounded-full uppercase tracking-widest shrink-0 ${bill.billType === 'variable' ? 'bg-orange-100 text-orange-600' : 'bg-indigo-100 text-indigo-600'}`}>
+                                   {bill.billType === 'variable' ? 'Passageira' : 'Fixa'}
+                                 </span>
                                </div>
                                <div className="flex items-center gap-2 md:gap-3 overflow-hidden text-ellipsis whitespace-nowrap">
                                  <span className="text-[8px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{CATEGORIES.find(c => c.value === bill.category)?.label}</span>
@@ -3122,6 +3201,7 @@ export default function App() {
                       dueDate: formData.get('dueDate') as string,
                       category: formData.get('category') as any,
                       status: (editingBill?.status || 'pending') as any,
+                      billType: formData.get('billType') as any,
                     });
                   } catch (err: any) {
                     console.error("Erro ao salvar conta:", err);
@@ -3142,7 +3222,7 @@ export default function App() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Vencimento Planejado</label>
                       <input 
@@ -3150,7 +3230,7 @@ export default function App() {
                         name="dueDate" 
                         defaultValue={editingBill?.dueDate || new Date().toISOString().split('T')[0]} 
                         required 
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-6 py-4 outline-none focus:border-indigo-600 transition-all font-bold text-xs uppercase tracking-[0.2em]" 
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 outline-none focus:border-indigo-600 transition-all font-bold text-xs uppercase tracking-[0.2em]" 
                       />
                     </div>
                     <div className="space-y-2">
@@ -3158,11 +3238,22 @@ export default function App() {
                       <select 
                         name="category" 
                         defaultValue={editingBill?.category || 'escola'}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-6 py-4 outline-none focus:border-indigo-600 transition-all font-bold text-xs uppercase tracking-widest appearance-none cursor-pointer"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 outline-none focus:border-indigo-600 transition-all font-bold text-xs uppercase tracking-widest appearance-none cursor-pointer"
                       >
                         {CATEGORIES.filter(c => !['transferencia'].includes(c.value)).map(source => (
                           <option key={source.value} value={source.value}>{source.label}</option>
                         ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Recorrência</label>
+                      <select 
+                        name="billType" 
+                        defaultValue={editingBill?.billType || 'fixed'}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-4 outline-none focus:border-indigo-600 transition-all font-bold text-xs uppercase tracking-widest appearance-none cursor-pointer"
+                      >
+                        <option value="fixed">💡 CONTA FIXA</option>
+                        <option value="variable">🌪️ PASSAGEIRA</option>
                       </select>
                     </div>
                   </div>
@@ -3547,12 +3638,12 @@ export default function App() {
                     await addDebt({
                       description: formData.get('description') as string,
                       totalAmount: parseFloat(formData.get('totalAmount') as string),
-                      paidAmount: 0, // No sistema simplificado, focamos no saldo devedor atual
-                      dueDate: formData.get('dueDate') as string,
+                      paidAmount: 0, 
+                      dueDate: formData.get('dueDate') as string || null,
                       type: formData.get('type') as any,
-                      installments: parseInt(formData.get('installments') as string) || undefined,
-                      remainingInstallments: parseInt(formData.get('remainingInstallments') as string) || undefined,
-                      installmentValue: parseFloat(formData.get('installmentValue') as string) || undefined,
+                      installments: parseInt(formData.get('installments') as string) || null,
+                      remainingInstallments: parseInt(formData.get('remainingInstallments') as string) || null,
+                      installmentValue: parseFloat(formData.get('installmentValue') as string) || null,
                       status: 'active',
                     });
                   } catch (err: any) {

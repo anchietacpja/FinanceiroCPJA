@@ -40,6 +40,25 @@ export function learnCategories(transactions: Transaction[]): Record<string, Cat
 }
 
 /**
+ * Converte data de DD/MM/AAAA para AAAA-MM-DD (ISO)
+ */
+export function normalizeDate(dateStr: string): string {
+  if (!dateStr) return '';
+  const parts = dateStr.split('/');
+  if (parts.length !== 3) return dateStr;
+  
+  const day = parts[0].padStart(2, '0');
+  const month = parts[1].padStart(2, '0');
+  let year = parts[2];
+  
+  if (year.length === 2) {
+    year = '20' + year;
+  }
+  
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * Tenta extrair Data, Descrição e Valor de uma linha de extrato de forma inteligente.
  * Suporta formatos de Nubank, Mercado Pago, BB e Caixa.
  */
@@ -70,7 +89,10 @@ export function parseStatementLine(line: string): { date: string, description: s
   const dateRegex = /(\d{1,2}\/\d{1,2}\/\d{2,4})/;
   const dateIndex = parts.findIndex(p => dateRegex.test(p));
   if (dateIndex !== -1) {
-    date = parts[dateIndex].match(dateRegex)?.[0] || '';
+    const rawDate = parts[dateIndex].match(dateRegex)?.[0] || '';
+    if (rawDate) {
+      date = normalizeDate(rawDate);
+    }
   }
 
   // 2. Localiza o Valor
