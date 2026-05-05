@@ -48,42 +48,46 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 
-const SafeLogo = ({ src, alt, className, fallbackIcon: Fallback = School }: { src: string; alt: string; className?: string; fallbackIcon?: any }) => {
+const SafeLogo = ({ src, alt, className = "", fallbackIcon: Fallback = School }: { src: string; alt: string; className?: string; fallbackIcon?: any }) => {
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
   
   useEffect(() => {
+    if (!src) {
+      setError(true);
+      setLoading(false);
+      return;
+    }
     setError(false);
     setLoading(true);
   }, [src]);
 
-  if (error || !src) {
-    return (
-      <div className={`${className} flex items-center justify-center bg-slate-50 text-slate-300`}>
-        <Fallback size={24} strokeWidth={1} />
-      </div>
-    );
-  }
-
   return (
-    <div className={`relative ${className}`}>
-      {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-slate-50 text-slate-200">
-          <Fallback size={20} strokeWidth={1} className="animate-pulse" />
+    <div className={`relative flex items-center justify-center overflow-hidden ${className}`}>
+      {loading && !error && (
+        <div className="absolute inset-0 flex items-center justify-center text-slate-300">
+          <Fallback size={20} strokeWidth={1.5} className="animate-pulse" />
         </div>
       )}
-      <img 
-        src={src} 
-        alt={alt} 
-        className={`${className} ${loading ? 'opacity-0' : 'opacity-100'}`} 
-        onLoad={() => setLoading(false)}
-        referrerPolicy="no-referrer"
-        onError={(e) => {
-          console.error(`Failed to load logo: ${src}`, e);
-          setError(true);
-          setLoading(false);
-        }} 
-      />
+      
+      {error ? (
+        <div className="flex items-center justify-center w-full h-full text-slate-300 bg-slate-50">
+          <Fallback size={24} strokeWidth={1} />
+        </div>
+      ) : (
+        <img 
+          key={src}
+          src={src} 
+          alt={alt} 
+          className={`w-full h-full object-contain transition-opacity duration-300 ${loading ? 'opacity-0' : 'opacity-100'}`} 
+          onLoad={() => setLoading(false)}
+          onError={(e) => {
+            console.error("Logo Error:", src);
+            setError(true);
+            setLoading(false);
+          }} 
+        />
+      )}
     </div>
   );
 };
@@ -91,7 +95,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Transaction, Category, FundSource, Debt, Bill, UserRole, TeamMember, Account, Transfer } from './types';
 import { CATEGORIES, FUND_SOURCES, LOGO_ANCHIETA, LOGO_CPJA, SCHOOL_NAME, PLATFORM_NAME, APP_LOGO } from './constants';
 import { auth, db, signInWithGoogle, loginWithEmail, registerWithEmail, createCollaboratorAccount, logout, handleFirestoreError } from './lib/firebase';
-import { exportTransactionsToCSV } from './lib/export';
+import { exportTransactionsToCSV, exportTransactionsToPDF } from './lib/export';
 import { learnCategories, suggestCategory, parseStatementLine, normalizeDate } from './lib/intelligence';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -179,7 +183,7 @@ export default function App() {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-pro",
+        model: "gemini-3-flash-preview",
         contents: [
           {
             parts: [
@@ -467,7 +471,10 @@ export default function App() {
         
         // Filtrar por origens/contas (se a lista existir, o usuário só vê o que está nela)
         if (userPermissions.accountId) {
-          filtered = filtered.filter(t => userPermissions.accountId?.includes(t.accountId));
+          filtered = filtered.filter(t => 
+            userPermissions.accountId?.includes(t.accountId) || 
+            (t.type === 'transfer' && t.toAccountId && userPermissions.accountId?.includes(t.toAccountId))
+          );
         }
       } else {
         // Se for um viewer sem objeto de permissões no banco, bloqueamos por segurança ou mostramos tudo?
@@ -490,7 +497,7 @@ export default function App() {
 
     return authorizedTransactions.filter(t => {
       const dateStr = (t.date || '').includes('/') ? normalizeDate(t.date) : (t.date || '');
-      const tDate = new Date(dateStr + 'T12:00:00');
+      const tDate = new Date(dateStr + (dateStr.includes('T') ? '' : 'T12:00:00'));
       if (isNaN(tDate.getTime())) return periodFilter === 'all';
       
       if (periodFilter === 'all') return true;
@@ -510,15 +517,24 @@ export default function App() {
   const periodMetrics = useMemo(() => {
     const income = periodFilteredTransactions
       .filter(t => t.type === 'income')
-      .reduce((acc, t) => acc + (t.amount || 0), 0);
+      .reduce((acc, t) => {
+        const amt = Number(t.amount || 0);
+        return acc + (isNaN(amt) ? 0 : amt);
+      }, 0);
     
     const expense = periodFilteredTransactions
       .filter(t => t.type === 'expense')
-      .reduce((acc, t) => acc + (t.amount || 0), 0);
+      .reduce((acc, t) => {
+        const amt = Number(t.amount || 0);
+        return acc + (isNaN(amt) ? 0 : amt);
+      }, 0);
     
     const transfers = periodFilteredTransactions
       .filter(t => t.type === 'transfer')
-      .reduce((acc, t) => acc + (t.amount || 0), 0);
+      .reduce((acc, t) => {
+        const amt = Number(t.amount || 0);
+        return acc + (isNaN(amt) ? 0 : amt);
+      }, 0);
 
     return { income, expense, transfers, net: income - expense };
   }, [periodFilteredTransactions]);
@@ -542,15 +558,16 @@ export default function App() {
     }));
 
     periodFilteredTransactions.forEach(t => {
-      const dateStr = (t.date || '').includes('/') ? (t.date.split('/').reverse().join('-')) : (t.date || '');
-      const tDate = new Date(dateStr + 'T12:00:00');
+      const dateStr = (t.date || '').includes('/') ? normalizeDate(t.date) : (t.date || '');
+      const tDate = new Date(dateStr + (dateStr.includes('T') ? '' : 'T12:00:00'));
       if (isNaN(tDate.getTime())) return;
 
       const day = tDate.getDate();
       // Only include in chart if it belongs to the month/year we are plotting
       if (tDate.getMonth() === month && tDate.getFullYear() === year) {
-        if (t.type === 'income' && data[day - 1]) data[day - 1].income += t.amount;
-        if (t.type === 'expense' && data[day - 1]) data[day - 1].expense += t.amount;
+        const amt = Number(t.amount || 0);
+        if (t.type === 'income' && data[day - 1]) data[day - 1].income += amt;
+        if (t.type === 'expense' && data[day - 1]) data[day - 1].expense += amt;
       }
     });
 
@@ -558,7 +575,6 @@ export default function App() {
   }, [periodFilteredTransactions, periodFilter]);
 
   // Totais por Origem de Recurso (Saldo real de cada "Carteira")
-  // Aqui estamos somando os movimentos. Em uma app real, poderíamos ter um saldo inicial configurável.
   const [notifications, setNotifications] = useState<{id: string, message: string, type: 'success' | 'error'}[]>([]);
 
   const addNotification = (message: string, type: 'success' | 'error' = 'success') => {
@@ -572,25 +588,33 @@ export default function App() {
   const balances = useMemo(() => {
     const b: Record<string, number> = {};
     accounts.forEach(acc => {
-      b[acc.id] = acc.balance || 0;
+      b[acc.id] = Number(acc.balance || 0);
     });
 
-    authorizedTransactions.forEach(t => {
+    // Use ALL transactions to calculate balances, even for viewers
+    // The filter 'if (b[t.accountId] !== undefined)' ensures we only 
+    // update balances for accounts the user can actually see.
+    // This fixed a bug where transfers from unauthorized accounts were ignored.
+    const allTxs = transactions;
+
+    allTxs.forEach(t => {
+      const amt = Number(t.amount || 0);
+      if (isNaN(amt)) return;
+
       if (t.type === 'income') {
-        if (b[t.accountId] !== undefined) b[t.accountId] += t.amount || 0;
+        if (b[t.accountId] !== undefined) b[t.accountId] += amt;
       } else if (t.type === 'expense') {
-        if (b[t.accountId] !== undefined) b[t.accountId] -= t.amount || 0;
+        if (b[t.accountId] !== undefined) b[t.accountId] -= amt;
       } else if (t.type === 'transfer') {
-        // Para transferências, o accountId é de onde SAI e toAccountId é para onde VAI
-        if (b[t.accountId] !== undefined) b[t.accountId] -= t.amount || 0;
+        if (b[t.accountId] !== undefined) b[t.accountId] -= amt;
         if (t.toAccountId && b[t.toAccountId] !== undefined) {
-          b[t.toAccountId] += t.amount || 0;
+          b[t.toAccountId] += amt;
         }
       }
     });
 
     return b;
-  }, [authorizedTransactions, accounts]);
+  }, [transactions, accounts]);
 
   // Cruzamento de dados: Quando gastamos dinheiro da 'origem' errada
   const inconsistencies = useMemo(() => {
@@ -611,19 +635,18 @@ export default function App() {
 
   // Métricas do período filtrado
   const schoolMetrics = useMemo(() => {
-    const totalDebt = debts.reduce((acc, d) => d.status === 'active' ? acc + d.totalAmount : acc, 0);
     return {
-      tuition: periodFilteredTransactions.filter(t => t.category === 'mensalidade' && t.type === 'income').reduce((acc, t) => acc + (t.amount || 0), 0),
-      payroll: periodFilteredTransactions.filter(t => t.category === 'folha' && t.type === 'expense').reduce((acc, t) => acc + (t.amount || 0), 0),
-      maintenance: periodFilteredTransactions.filter(t => t.category === 'manutencao' && t.type === 'expense').reduce((acc, t) => acc + (t.amount || 0), 0),
-      totalDebt,
+      tuition: periodFilteredTransactions.filter(t => t.category === 'mensalidade' && t.type === 'income').reduce((acc, t) => acc + Number(t.amount || 0), 0),
+      payroll: periodFilteredTransactions.filter(t => t.category === 'folha' && t.type === 'expense').reduce((acc, t) => acc + Number(t.amount || 0), 0),
+      maintenance: periodFilteredTransactions.filter(t => t.category === 'manutencao' && t.type === 'expense').reduce((acc, t) => acc + Number(t.amount || 0), 0),
       events: periodFilteredTransactions.filter(t => t.category === 'evento').reduce((acc, t) => {
-        if (t.type === 'income') return acc + (t.amount || 0);
-        if (t.type === 'expense') return acc - (t.amount || 0);
+        const amt = Number(t.amount || 0);
+        if (t.type === 'income') return acc + amt;
+        if (t.type === 'expense') return acc - amt;
         return acc;
       }, 0),
     };
-  }, [periodFilteredTransactions, debts]);
+  }, [periodFilteredTransactions]);
 
   // Métricas da Agenda
   const agendaMetrics = useMemo(() => {
@@ -633,19 +656,19 @@ export default function App() {
 
     const plannedThisMonth = bills.filter(b => {
       const dateStr = (b.dueDate || '').includes('/') ? normalizeDate(b.dueDate) : (b.dueDate || '');
-      const d = new Date(dateStr + 'T12:00:00');
+      const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T12:00:00'));
       if (isNaN(d.getTime())) return false;
       return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-    }).reduce((acc, b) => acc + b.amount, 0);
+    }).reduce((acc, b) => acc + Number(b.amount || 0), 0);
 
     const spentPreviousMonths = authorizedTransactions.filter(t => {
       if (t.type !== 'expense') return false;
       const dateStr = (t.date || '').includes('/') ? normalizeDate(t.date) : (t.date || '');
-      const d = new Date(dateStr + 'T12:00:00');
+      const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T12:00:00'));
       if (isNaN(d.getTime())) return false;
       const isBeforeCurrentMonth = d.getFullYear() < currentYear || (d.getFullYear() === currentYear && d.getMonth() < currentMonth);
       return isBeforeCurrentMonth;
-    }).reduce((acc, t) => acc + t.amount, 0);
+    }).reduce((acc, t) => acc + Number(t.amount || 0), 0);
 
     return { plannedThisMonth, spentPreviousMonths };
   }, [bills, authorizedTransactions]);
@@ -1030,7 +1053,8 @@ export default function App() {
   };
 
   const markBillAsPaid = async (bill: Bill) => {
-    if (!user || userRole === 'viewer') return;
+    if (!user || userRole === 'viewer' || isProcessing) return;
+    setIsProcessing(true);
     try {
       // Create a transaction first
       await addTransaction({
@@ -1047,6 +1071,8 @@ export default function App() {
       });
     } catch (err) {
       handleFirestoreError(err, 'update', 'bills');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -1087,20 +1113,46 @@ export default function App() {
   };
 
   const saveImported = async () => {
-    if (!user) return;
+    if (!user || isProcessing) return;
     if (userRole === 'viewer') {
       alert('Acesso restrito: Visualizadores não podem salvar importações.');
       return;
     }
+    
+    setIsProcessing(true);
     try {
+      // Usar um loop sequencial para garantir ordem e evitar sobrecarga
+      // mas mantendo o isProcessing true durante todo o processo
       for (const t of previewTransactions) {
-        await addTransaction(t as any);
+        // Removemos o log excessivo para performance em lote
+        const normalizedDateStr = t.date?.includes('/') ? normalizeDate(t.date) : t.date;
+        const cleanData: any = {
+          date: normalizedDateStr,
+          description: t.description,
+          amount: t.amount,
+          type: t.type,
+          category: t.type === 'transfer' ? 'transferencia' : t.category,
+          accountId: t.accountId,
+          userId: currentTenantId,
+          createdAt: serverTimestamp(),
+        };
+
+        if (t.type === 'transfer' && t.toAccountId) {
+          cleanData.toAccountId = t.toAccountId;
+        }
+
+        await addDoc(collection(db, 'transactions'), cleanData);
       }
+      
+      addNotification(`${previewTransactions.length} transações importadas com sucesso!`, "success");
       setShowImportModal(false);
       setPreviewTransactions([]);
       setImportText('');
     } catch (err) {
       console.error("Erro ao salvar importação:", err);
+      addNotification("Erro ao importar algumas transações.", "error");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -1825,13 +1877,6 @@ export default function App() {
                     </div>
                   </div>
                 )}
-
-                {/* Always show debt but could be filtered if we had debt categories */}
-                <div className="bg-white border-2 border-slate-900 rounded-3xl p-10 text-slate-800 shadow-[12px_12px_0px_0px_rgba(15,23,42,1)] hover:shadow-[16px_16px_0px_0px_rgba(15,23,42,1)] transition-all group overflow-hidden relative">
-                  <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.3em] mb-2 italic">Passivo Exposto</p>
-                  <p className="text-3xl font-mono font-black tracking-tighter text-red-500">R$ {schoolMetrics.totalDebt.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                  <p className="text-[9px] text-red-500 font-black uppercase mt-4 bg-red-50 px-2 py-1 rounded w-max">Atenção Crítica</p>
-                </div>
               </div>
 
 
@@ -2191,7 +2236,7 @@ export default function App() {
                                 {(() => {
                                   try {
                                     const dStr = (t.date || '').includes('/') ? normalizeDate(t.date) : (t.date || '');
-                                    const dObj = new Date(dStr + 'T12:00:00');
+                                    const dObj = new Date(dStr + (dStr.includes('T') ? '' : 'T12:00:00'));
                                     return isNaN(dObj.getTime()) ? (t.date || '---') : dObj.toLocaleDateString('pt-BR');
                                   } catch (e) {
                                     return t.date || '---';
@@ -2331,7 +2376,7 @@ export default function App() {
                    <p className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-2">Exposição Atual</p>
                    <div className="flex items-baseline gap-2">
                      <span className="text-4xl font-mono font-black text-slate-900">
-                       R$ {schoolMetrics.totalDebt.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                       R$ {debts.reduce((acc, d) => d.status === 'active' ? acc + Number(d.totalAmount || 0) : acc, 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                      </span>
                      <span className="text-xs font-bold text-red-400 uppercase tracking-tighter">Em aberto</span>
                    </div>
@@ -2375,7 +2420,10 @@ export default function App() {
                 <h3 className="text-[10px] font-black text-orange-200 uppercase tracking-[0.3em] mb-8">Nível de Crédito</h3>
                 <div className="flex flex-col items-center justify-center py-4">
                    <div className="text-5xl font-mono font-black mb-1">
-                     {Math.max(0, Math.min(100, Math.round(100 - (schoolMetrics.totalDebt / 50000 * 100))))}%
+                     {(() => {
+                        const total = debts.reduce((acc, d) => d.status === 'active' ? acc + Number(d.totalAmount || 0) : acc, 0);
+                        return Math.max(0, Math.min(100, Math.round(100 - (total / 50000 * 100))));
+                     })()}%
                    </div>
                    <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Segurança de Caixa</span>
                 </div>
@@ -2470,6 +2518,7 @@ export default function App() {
                       <div className="mt-6 flex gap-3">
                         <button 
                           onClick={async () => {
+                            if (isProcessing) return;
                             const newVal = prompt('Reduzir saldo devedor em (R$):', '0');
                             if (newVal !== null) {
                               const val = parseFloat(newVal.replace(',', '.'));
@@ -2516,13 +2565,15 @@ export default function App() {
                               }
                             }
                           }}
-                          className="flex-1 py-4 bg-slate-900 hover:bg-black text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-xl transition-all shadow-xl shadow-slate-200 active:scale-95 flex items-center justify-center gap-2"
+                          className="flex-1 py-4 bg-slate-900 hover:bg-black text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-xl transition-all shadow-xl shadow-slate-200 active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                          disabled={isProcessing}
                         >
                           <CreditCard size={14} />
                           Pagar Parcela
                         </button>
                         <button 
                           onClick={() => {
+                            if (isProcessing) return;
                             const confirmPay = window.confirm(`Deseja quitar totalmente esta dívida?\n\nValor: R$ ${debt.totalAmount.toLocaleString('pt-BR')}`);
                             if (!confirmPay) return;
 
@@ -2551,7 +2602,8 @@ export default function App() {
                               } catch (e) { console.error(e); }
                             })();
                           }}
-                          className="px-6 py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-100 transition-all flex items-center justify-center"
+                          className="px-6 py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-100 transition-all flex items-center justify-center disabled:opacity-50"
+                          disabled={isProcessing}
                           title="Quitar"
                         >
                           <CheckCircle2 size={20} strokeWidth={3} />
@@ -2684,7 +2736,8 @@ export default function App() {
                                  {bill.status === 'pending' && (
                                    <button 
                                     onClick={() => markBillAsPaid(bill)}
-                                    className="bg-emerald-500 hover:bg-emerald-600 text-white p-2 md:p-3 rounded-lg md:rounded-xl transition-all shadow-lg shadow-emerald-100 active:scale-95"
+                                    disabled={isProcessing}
+                                    className="bg-emerald-500 hover:bg-emerald-600 text-white p-2 md:p-3 rounded-lg md:rounded-xl transition-all shadow-lg shadow-emerald-100 active:scale-95 disabled:opacity-50"
                                     title="Marcar como Pago"
                                    >
                                      <CheckCircle2 size={16} md:size={20} />
@@ -2767,10 +2820,17 @@ export default function App() {
                     </div>
                     <button 
                       onClick={() => exportTransactionsToCSV(periodFilteredTransactions, accounts)}
-                      className="w-full mt-6 bg-slate-800 hover:bg-slate-900 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all uppercase text-xs tracking-widest"
+                      className="w-full mt-6 bg-slate-50 hover:bg-slate-100 text-slate-800 py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all uppercase text-xs tracking-widest border border-slate-200"
                     >
                       <Download size={18} />
                       Gerar Arquivo (CSV)
+                    </button>
+                    <button 
+                      onClick={() => exportTransactionsToPDF(periodFilteredTransactions, accounts)}
+                      className="w-full mt-3 bg-slate-800 hover:bg-slate-900 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all uppercase text-xs tracking-widest shadow-lg shadow-slate-200"
+                    >
+                      <FileText size={18} />
+                      Gerar Relatório (PDF)
                     </button>
                     <p className="text-[9px] text-slate-400 font-medium leading-relaxed mt-4 italic">
                       * O arquivo gerado é compatível com Excel e sistemas de contabilidade padrão.
@@ -2789,14 +2849,16 @@ export default function App() {
                         const catTotal = authorizedTransactions
                           .filter(t => {
                             if (t.category !== cat.value) return false;
-                            const tDate = new Date(t.date + 'T00:00:00');
+                            const dStr = (t.date || '').includes('/') ? normalizeDate(String(t.date)) : String(t.date || '');
+                            const tDate = new Date(dStr + (dStr.includes('T') ? '' : 'T12:00:00'));
                             const matchesYear = tDate.getFullYear() === reportYear;
                             const matchesMonth = reportMonth === 'all' || tDate.getMonth().toString() === reportMonth;
                             return matchesYear && matchesMonth;
                           })
                           .reduce((acc, t) => {
-                            if (t.type === 'income') return acc + t.amount;
-                            if (t.type === 'expense') return acc - t.amount;
+                            const amt = Number(t.amount || 0);
+                            if (t.type === 'income') return acc + amt;
+                            if (t.type === 'expense') return acc - amt;
                             return acc;
                           }, 0);
                         
@@ -3260,10 +3322,15 @@ export default function App() {
                       </button>
                       <button
                         onClick={saveImported}
-                        className="flex-[2] bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl shadow-indigo-100 uppercase text-xs tracking-widest"
+                        disabled={isProcessing || previewTransactions.length === 0}
+                        className="flex-[2] bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl shadow-indigo-100 uppercase text-xs tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <CheckCircle2 size={18} />
-                        Confirmar Lançamentos
+                        {isProcessing ? (
+                          <Loader2 size={18} className="animate-spin" />
+                        ) : (
+                          <CheckCircle2 size={18} />
+                        )}
+                        {isProcessing ? 'Gravando...' : 'Confirmar Lançamentos'}
                       </button>
                     </div>
                   </div>

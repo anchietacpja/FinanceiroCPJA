@@ -4,11 +4,9 @@
  */
 
 import { Category, FundSource } from './types';
-
-// Logos are now in public folder
-const logo = '/dono.png?v=3.1';
-const logoAnchieta = '/logo_anchieta.png?v=3.1';
-const logoCPJA = '/logo_cpja.jpg?v=3.1';
+export const APP_LOGO = '/dono.png';
+export const LOGO_ANCHIETA = '/logo_anchieta.png';
+export const LOGO_CPJA = '/logo_cpja.jpg';
 
 export const CATEGORIES: { value: Category; label: string; color: string }[] = [
   { value: 'escola', label: 'Escola (Geral)', color: 'bg-orange-500' },
@@ -36,8 +34,5 @@ export const FUND_SOURCES: { value: FundSource; label: string }[] = [
   { value: 'cantina', label: 'Caixa da Cantina' },
 ];
 
-export const APP_LOGO = logo;
-export const LOGO_ANCHIETA = logoAnchieta;
-export const LOGO_CPJA = logoCPJA;
 export const SCHOOL_NAME = "Colégio Anchieta CPJA";
 export const PLATFORM_NAME = "Nokite Hub";

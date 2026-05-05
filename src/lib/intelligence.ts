@@ -44,15 +44,27 @@ export function learnCategories(transactions: Transaction[]): Record<string, Cat
  */
 export function normalizeDate(dateStr: string): string {
   if (!dateStr) return '';
-  const parts = dateStr.split('/');
+  const cleanDate = dateStr.replace(/[^0-9/-]/g, '');
+  
+  let parts: string[] = [];
+  if (cleanDate.includes('/')) parts = cleanDate.split('/');
+  else if (cleanDate.includes('-')) parts = cleanDate.split('-');
+  
   if (parts.length !== 3) return dateStr;
   
-  const day = parts[0].padStart(2, '0');
-  const month = parts[1].padStart(2, '0');
-  let year = parts[2];
-  
-  if (year.length === 2) {
-    year = '20' + year;
+  let day, month, year;
+  // Check if it is DD/MM/YYYY or YYYY-MM-DD
+  if (parts[0].length === 4) {
+    // YYYY-MM-DD
+    year = parts[0];
+    month = parts[1].padStart(2, '0');
+    day = parts[2].padStart(2, '0');
+  } else {
+    // DD/MM/YYYY
+    day = parts[0].padStart(2, '0');
+    month = parts[1].padStart(2, '0');
+    year = parts[2];
+    if (year.length === 2) year = '20' + year;
   }
   
   return `${year}-${month}-${day}`;
@@ -107,13 +119,28 @@ export function parseStatementLine(line: string): { date: string, description: s
     let rawAmount = parts[amountIndex]
       .replace('R$', '')
       .replace(/\s/g, '')
-      .replace(/\./g, '') // Remove separador de milhar brasileiro
-      .replace(',', '.') // Troca decimal brasileiro por padrão JS
       .trim();
     
+    // Check if it's likely a Brazilian format (comma as decimal separator)
+    // or International (dot as decimal separator).
+    // If it has both . and ,, then the one appearing last is likely the decimal separator.
+    const lastComma = rawAmount.lastIndexOf(',');
+    const lastDot = rawAmount.lastIndexOf('.');
+
+    if (lastComma > lastDot) {
+      // Brazilian format: 1.234,56
+      rawAmount = rawAmount.replace(/\./g, '').replace(',', '.');
+    } else if (lastDot > lastComma) {
+      // International format: 1,234.56 or just 1234.56
+      rawAmount = rawAmount.replace(/,/g, '');
+    } else if (lastComma !== -1) {
+      // only comma: 1234,56
+      rawAmount = rawAmount.replace(',', '.');
+    }
+    
     // Tratamento para bancos que colocam (D) ou (C) no final
-    if (rawAmount.includes('D')) {
-      rawAmount = '-' + rawAmount.replace('D', '');
+    if (rawAmount.includes('D') || rawAmount.includes('-')) {
+      rawAmount = '-' + rawAmount.replace('D', '').replace('-', '');
     } else if (rawAmount.includes('C')) {
       rawAmount = rawAmount.replace('C', '');
     }
