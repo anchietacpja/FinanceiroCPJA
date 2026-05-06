@@ -136,8 +136,11 @@ export default function App() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [debts, setDebts] = useState<Debt[]>([]);
+  const [payingDebt, setPayingDebt] = useState<Debt | null>(null);
+  const [payAmount, setPayAmount] = useState<string>('0');
+  const [payAccount, setPayAccount] = useState<string>('');
   const [bills, setBills] = useState<Bill[]>([]);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'transactions' | 'accounts' | 'reports' | 'debts' | 'payables' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'transactions' | 'accounts' | 'reports' | 'debts' | 'payables' | 'settings' | 'cantina'>('dashboard');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
@@ -155,7 +158,6 @@ export default function App() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmDeleteMember, setConfirmDeleteMember] = useState<TeamMember | null>(null);
   const [confirmDeleteDebt, setConfirmDeleteDebt] = useState<string | null>(null);
-  const [confirmPayDebt, setConfirmPayDebt] = useState<string | null>(null);
   const [confirmDeleteBill, setConfirmDeleteBill] = useState<string | null>(null);
   const [editingPermissionsMember, setEditingPermissionsMember] = useState<TeamMember | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -280,6 +282,11 @@ export default function App() {
         setUserRole(data.role);
         setUserPermissions(data.permissions || null);
         setCurrentTenantId(data.tenantId);
+        
+        // Auto-switch tab based on role if just logging in
+        if (data.role === 'cantina') {
+          setActiveTab('cantina');
+        }
       }
     }, (error) => {
       console.error("Erro no listener de team_members:", error);
@@ -457,6 +464,14 @@ export default function App() {
   const authorizedTransactions = useMemo(() => {
     // Proprietário vê tudo
     if (userRole === 'owner') return transactions;
+
+    // Cantina vê apenas movimentações da cantina
+    if (userRole === 'cantina') {
+        return transactions.filter(t => 
+            t.category === 'cantina' || 
+            accounts.find(a => a.id === t.accountId)?.name.toLowerCase().includes('cantina')
+        );
+    }
     
     // Se for viewer e tiver permissões, filtramos rigorosamente
     if (userRole === 'viewer') {
@@ -709,6 +724,7 @@ export default function App() {
           type: t.type,
           category: t.type === 'transfer' ? 'transferencia' : t.category,
           accountId: t.accountId,
+          paymentMethod: t.paymentMethod || null,
         };
         if (t.type === 'transfer' && t.toAccountId) {
           updateData.toAccountId = t.toAccountId;
@@ -727,6 +743,7 @@ export default function App() {
           type: t.type,
           category: t.type === 'transfer' ? 'transferencia' : t.category,
           accountId: t.accountId,
+          paymentMethod: t.paymentMethod || null,
           userId: currentTenantId,
           createdAt: serverTimestamp(),
         };
@@ -816,8 +833,14 @@ export default function App() {
       alert('Seu ambiente financeiro não foi carregado corretamente. Tente recarregar a página.');
       return;
     }
-    if (userRole !== 'owner') {
-      alert('Desculpe, apenas proprietários podem adicionar membros.');
+    if (userRole === 'viewer') {
+      alert('Desculpe, visualizadores não podem adicionar membros.');
+      return;
+    }
+    
+    // Prevent non-owners from inviting owners
+    if (userRole !== 'owner' && role === 'owner') {
+      alert('Apenas proprietários podem convidar outros administradores.');
       return;
     }
 
@@ -835,11 +858,22 @@ export default function App() {
         }
       }
 
+      const defaultPermissions = role === 'cantina' ? {
+        tabs: ['cantina'],
+        categories: ['cantina'],
+        accountId: []
+      } : role === 'manager' ? {
+        tabs: ['dashboard', 'accounts', 'transactions', 'debts', 'payables', 'cantina', 'reports'],
+        categories: CATEGORIES.map(c => c.value),
+        accountId: []
+      } : undefined;
+
       await setDoc(doc(db, 'team_members', email), {
         email,
         role,
         tenantId: currentTenantId,
         invitedAt: Date.now(),
+        permissions: defaultPermissions
       });
       addNotification(`Colaborador ${email} autorizado com sucesso! Se você definiu uma senha, ele já pode entrar.`, "success");
     } catch (err: any) {
@@ -858,8 +892,8 @@ export default function App() {
 
   const removeTeamMember = async (id: string) => {
     if (!user) return;
-    if (userRole !== 'owner') {
-      alert('Apenas proprietários podem remover membros.');
+    if (userRole === 'viewer') {
+      alert('Visualizadores não podem remover membros.');
       return;
     }
     try {
@@ -876,7 +910,7 @@ export default function App() {
   };
 
   const updateMemberPermissions = async (memberEmail: string, permissions: TeamMember['permissions']) => {
-    if (!user || userRole !== 'owner') return;
+    if (!user || userRole === 'viewer') return;
     try {
       await updateDoc(doc(db, 'team_members', memberEmail), { permissions });
       addNotification('Permissões atualizadas com sucesso!', "success");
@@ -907,6 +941,53 @@ export default function App() {
       }
       alert("Erro ao atualizar dívida: " + displayMsg);
       handleFirestoreError(err, 'update', 'debts');
+    }
+  };
+
+  const executeDebtPayment = async () => {
+    if (!payingDebt || !payAccount || isProcessing) return;
+    
+    const val = parseFloat(payAmount.replace(',', '.'));
+    if (isNaN(val) || val <= 0) {
+      alert("Valor inválido.");
+      return;
+    }
+
+    const selectedAccount = accounts.find(a => a.id === payAccount);
+    if (!selectedAccount) {
+      alert("Conta não selecionada.");
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const isFullLiquidation = val >= payingDebt.totalAmount;
+      const reduced = Math.max(0, payingDebt.totalAmount - val);
+      const remaining = payingDebt.remainingInstallments ? Math.max(0, payingDebt.remainingInstallments - 1) : undefined;
+      
+      // Criar transação de saída
+      await addTransaction({
+        date: new Date().toISOString().split('T')[0],
+        description: `${isFullLiquidation ? 'QUITAÇÃO' : 'PARCELA'}: ${payingDebt.description}`,
+        amount: val,
+        type: 'expense',
+        category: 'folha', 
+        accountId: selectedAccount.id,
+      });
+
+      await updateDebt(payingDebt.id, { 
+         totalAmount: reduced,
+         remainingInstallments: isFullLiquidation ? 0 : remaining,
+         status: (isFullLiquidation || reduced <= 0) ? 'paid' : 'active'
+      });
+      
+      addNotification(`${isFullLiquidation ? 'Dívida quitada' : 'Parcela paga'} com sucesso!`, "success");
+      setPayingDebt(null);
+    } catch (error) {
+      console.error(error);
+      addNotification("Erro ao processar pagamento.", "error");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -1470,7 +1551,7 @@ export default function App() {
          </div>
 
         <div className="flex-1 flex flex-row md:flex-col items-center justify-start md:justify-start px-4 md:px-3 md:mt-2 md:space-y-1 overflow-x-auto md:overflow-y-auto custom-scrollbar scrollbar-hide gap-4 md:gap-0">
-          {(userRole === 'owner' || (userPermissions?.tabs?.includes('dashboard') ?? true)) && (
+          {(userRole === 'owner' || userRole === 'manager' || (userPermissions?.tabs?.includes('dashboard') ?? true)) && (
             <button 
               onClick={() => setActiveTab('dashboard')}
               className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 w-auto md:w-full p-2 md:px-4 md:py-3.5 rounded-2xl transition-all ${activeTab === 'dashboard' ? 'bg-orange-50 text-orange-600 shadow-sm border border-orange-100' : 'text-slate-400 hover:text-orange-600 hover:bg-orange-50/50'}`}
@@ -1480,7 +1561,17 @@ export default function App() {
             </button>
           )}
 
-          {(userRole === 'owner' || userPermissions?.tabs?.includes('accounts')) && (
+          {(userRole === 'owner' || userRole === 'manager' || userRole === 'cantina' || (userPermissions?.tabs?.includes('cantina') ?? false)) && (
+            <button 
+              onClick={() => setActiveTab('cantina')}
+              className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 w-auto md:w-full p-2 md:px-4 md:py-3.5 rounded-2xl transition-all ${activeTab === 'cantina' ? 'bg-emerald-50 text-emerald-600 shadow-sm border border-emerald-100' : 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50/50'}`}
+            >
+              <Coffee size={20} className={activeTab === 'cantina' ? 'text-emerald-600' : 'text-slate-400'} />
+              <span className="font-black text-[10px] md:text-xs uppercase tracking-widest">Cantina</span>
+            </button>
+          )}
+
+          {(userRole === 'owner' || userRole === 'manager' || (userPermissions?.tabs?.includes('accounts') ?? true)) && (
             <button 
               onClick={() => setActiveTab('accounts')}
               className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 w-auto md:w-full p-2 md:px-4 md:py-3.5 rounded-2xl transition-all ${activeTab === 'accounts' ? 'bg-orange-50 text-orange-600 shadow-sm border border-orange-100' : 'text-slate-400 hover:text-orange-600 hover:bg-orange-50/50'}`}
@@ -1490,7 +1581,7 @@ export default function App() {
             </button>
           )}
 
-          {(userRole === 'owner' || userPermissions?.tabs?.includes('transactions')) && (
+          {(userRole === 'owner' || userRole === 'manager' || (userPermissions?.tabs?.includes('transactions') ?? true)) && (
             <button 
               onClick={() => setActiveTab('transactions')}
               className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 w-auto md:w-full p-2 md:px-4 md:py-3.5 rounded-2xl transition-all ${activeTab === 'transactions' ? 'bg-slate-900 text-white shadow-xl translate-x-1' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-50'}`}
@@ -1500,7 +1591,7 @@ export default function App() {
             </button>
           )}
           
-          {(userRole === 'owner' || userPermissions?.tabs?.includes('debts')) && (
+          {(userRole === 'owner' || userRole === 'manager' || (userPermissions?.tabs?.includes('debts') ?? true)) && (
             <button 
               onClick={() => setActiveTab('debts')}
               className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 w-auto md:w-full p-2 md:px-4 md:py-3.5 rounded-2xl transition-all ${activeTab === 'debts' ? 'bg-slate-900 text-white shadow-xl translate-x-1' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-50'}`}
@@ -1510,7 +1601,7 @@ export default function App() {
             </button>
           )}
 
-          {(userRole === 'owner' || userPermissions?.tabs?.includes('payables')) && (
+          {(userRole === 'owner' || userRole === 'manager' || (userPermissions?.tabs?.includes('payables') ?? true)) && (
             <button 
               onClick={() => setActiveTab('payables')}
               className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 w-auto md:w-full p-2 md:px-4 md:py-3.5 rounded-2xl transition-all ${activeTab === 'payables' ? 'bg-slate-900 text-white shadow-xl translate-x-1' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-50'}`}
@@ -1520,7 +1611,7 @@ export default function App() {
             </button>
           )}
           
-          {(userRole === 'owner' || userPermissions?.tabs?.includes('reports')) && (
+          {(userRole === 'owner' || userRole === 'manager' || (userPermissions?.tabs?.includes('reports') ?? true)) && (
             <button 
               onClick={() => setActiveTab('reports')}
               className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 w-auto md:w-full p-2 md:px-4 md:py-3.5 rounded-2xl transition-all ${activeTab === 'reports' ? 'bg-slate-900 text-white shadow-xl translate-x-1' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-50'}`}
@@ -1530,7 +1621,7 @@ export default function App() {
             </button>
           )}
 
-          {userRole === 'owner' && (
+          {(userRole === 'owner' || userRole === 'manager' || userRole === 'cantina') && (
             <button 
               onClick={() => setActiveTab('settings')}
               className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 w-auto md:w-full p-2 md:px-4 md:py-3.5 rounded-2xl transition-all ${activeTab === 'settings' ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-50'}`}
@@ -2012,6 +2103,158 @@ export default function App() {
             </div>
           </div>
         </div>
+        ) : activeTab === 'cantina' ? (
+          <div className="space-y-8 pb-20">
+            <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+              <div>
+                <h2 className="text-3xl font-black text-slate-800 tracking-tighter uppercase italic">Fluxo de Caixa Cantina</h2>
+                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Controle diário de vendas e recebimentos</p>
+              </div>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => {
+                    setModalType('income');
+                    setShowAddModal(true);
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-4 rounded-xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-emerald-100 flex items-center gap-2 transition-all active:scale-95"
+                >
+                  <Plus size={18} />
+                  Registrar Venda
+                </button>
+              </div>
+            </header>
+
+            {/* Daily Dashboard */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {(() => {
+                const today = new Date().toISOString().split('T')[0];
+                const cantinaToday = transactions.filter(t => t.date === today && t.category === 'cantina' && !t.deleted);
+                const total = cantinaToday.reduce((acc, t) => acc + (t.type === 'income' ? t.amount : -t.amount), 0);
+                
+                const pix = cantinaToday.filter(t => t.paymentMethod === 'pix').reduce((acc, t) => acc + t.amount, 0);
+                const cash = cantinaToday.filter(t => t.paymentMethod === 'cash').reduce((acc, t) => acc + t.amount, 0);
+                const card = cantinaToday.filter(t => t.paymentMethod === 'card').reduce((acc, t) => acc + t.amount, 0);
+
+                return (
+                  <>
+                    <div className="bg-slate-900 rounded-[2rem] p-8 text-white relative overflow-hidden group md:col-span-2">
+                      <div className="absolute top-0 right-0 p-8 text-white/5 transform group-hover:scale-110 transition-transform">
+                        <Coffee size={80} strokeWidth={2.5} />
+                      </div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 mb-2">Total Consolidado Hoje</p>
+                      <h3 className="text-3xl font-black italic tracking-tighter">R$ {total.toLocaleString('pt-BR')}</h3>
+                      <div className="mt-6 flex items-center gap-2">
+                        <span className="px-2 py-0.5 bg-white/10 rounded text-[8px] font-black uppercase tracking-widest leading-none">Visão Geral</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-sm md:col-span-2">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-6 px-1">Métodos de Recebimento</p>
+                      <div className="grid grid-cols-3 gap-6">
+                        <div className="text-center">
+                          <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 mx-auto mb-3">
+                            <Plus size={18} />
+                          </div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 leading-none">PIX</p>
+                          <p className="text-sm font-black text-slate-800 tracking-tighter leading-none">R$ {pix.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        </div>
+                        <div className="text-center">
+                          <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 mx-auto mb-3">
+                            <Plus size={18} />
+                          </div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 leading-none">DINHEIRO</p>
+                          <p className="text-sm font-black text-slate-800 tracking-tighter leading-none">R$ {cash.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        </div>
+                        <div className="text-center">
+                          <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 mx-auto mb-3">
+                            <Plus size={18} />
+                          </div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 leading-none">CARTÃO</p>
+                          <p className="text-sm font-black text-slate-800 tracking-tighter leading-none">R$ {card.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+               <div className="p-6 border-b border-slate-50 flex items-center justify-between">
+                 <h3 className="text-xs font-black uppercase tracking-widest text-slate-800">Lançamentos da Cantina (Hoje)</h3>
+                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{new Date().toLocaleDateString('pt-BR')}</span>
+               </div>
+               <div className="overflow-x-auto">
+                 <table className="w-full text-left border-collapse">
+                   <thead>
+                     <tr className="bg-slate-50/50">
+                       <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Horário</th>
+                       <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Descrição</th>
+                       <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Meio</th>
+                       <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Valor</th>
+                       <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ações</th>
+                     </tr>
+                   </thead>
+                   <tbody className="divide-y divide-slate-50">
+                     {transactions
+                       .filter(t => t.date === new Date().toISOString().split('T')[0] && t.category === 'cantina' && !t.deleted)
+                       .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
+                       .map(t => (
+                         <tr key={t.id} className="hover:bg-slate-50/50 transition-colors">
+                           <td className="px-6 py-4">
+                             <span className="text-[10px] font-bold text-slate-400 uppercase">
+                               {t.createdAt?.toDate ? t.createdAt.toDate().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
+                             </span>
+                           </td>
+                           <td className="px-6 py-4">
+                             <span className="text-xs font-bold text-slate-700 uppercase tracking-tight">{t.description}</span>
+                           </td>
+                           <td className="px-6 py-4">
+                             <span className="text-[10px] font-black text-slate-500 uppercase tracking-tighter">
+                               {t.paymentMethod === 'pix' ? '📱 PIX' : t.paymentMethod === 'card' ? '💳 CARTÃO' : '💵 DINHEIRO'}
+                             </span>
+                           </td>
+                           <td className="px-6 py-4">
+                             <span className={`text-xs font-black tracking-tighter ${t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                               {t.type === 'income' ? '+' : '-'} R$ {t.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                             </span>
+                           </td>
+                           <td className="px-6 py-4">
+                             <div className="flex items-center gap-2">
+                                <button 
+                                  onClick={() => {
+                                    setEditingTransaction(t);
+                                    setModalType(t.type);
+                                    setShowAddModal(true);
+                                  }}
+                                  className="p-2 text-slate-300 hover:text-blue-600 transition-colors"
+                                >
+                                  <Pencil size={14} />
+                                </button>
+                                <button 
+                                  onClick={() => setConfirmDelete(t.id)}
+                                  className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                             </div>
+                           </td>
+                         </tr>
+                       ))
+                     }
+                     {transactions.filter(t => t.date === new Date().toISOString().split('T')[0] && t.category === 'cantina' && !t.deleted).length === 0 && (
+                       <tr>
+                         <td colSpan={6} className="px-6 py-12 text-center">
+                           <Coffee size={32} className="text-slate-200 mx-auto mb-3" />
+                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nenhum lançamento hoje ainda.</p>
+                         </td>
+                       </tr>
+                     )}
+                   </tbody>
+                 </table>
+               </div>
+            </div>
+          </div>
         ) : activeTab === 'accounts' ? (
           <div className="space-y-6">
             <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
@@ -2517,53 +2760,10 @@ export default function App() {
                     {userRole !== 'viewer' && (
                       <div className="mt-6 flex gap-3">
                         <button 
-                          onClick={async () => {
-                            if (isProcessing) return;
-                            const newVal = prompt('Reduzir saldo devedor em (R$):', '0');
-                            if (newVal !== null) {
-                              const val = parseFloat(newVal.replace(',', '.'));
-                              if (isNaN(val) || val <= 0) {
-                                alert("Por favor, insira um valor válido maior que zero.");
-                                return;
-                              }
-                              
-                              // Seleção de conta simplificada por prompt para não quebrar o fluxo mobile
-                              const accountNames = accounts.map((a, i) => `${i + 1}: ${a.name}`).join('\n');
-                              const accChoice = prompt(`Pagar com qual conta?\n\n${accountNames}\n\nDigite o número:`, '1');
-                              
-                              const accIdx = parseInt(accChoice || '1') - 1;
-                              const selectedAccount = accounts[accIdx];
-                              
-                              if (!selectedAccount) {
-                                alert("Conta não localizada. Pagamento cancelado.");
-                                return;
-                              }
-
-                              const reduced = Math.max(0, debt.totalAmount - val);
-                              const remaining = debt.remainingInstallments ? Math.max(0, debt.remainingInstallments - 1) : undefined;
-                              
-                              try {
-                                // Criar transação de saída
-                                await addTransaction({
-                                  date: new Date().toISOString().split('T')[0],
-                                  description: `PARCELA: ${debt.description}`,
-                                  amount: val,
-                                  type: 'expense',
-                                  category: 'folha', // ou 'outros', mas folha/manutencao costuma ser divida
-                                  accountId: selectedAccount.id,
-                                });
-
-                                await updateDebt(debt.id, { 
-                                   totalAmount: reduced,
-                                   remainingInstallments: remaining,
-                                   status: reduced <= 0 ? 'paid' : 'active'
-                                });
-                                
-                                addNotification(`Parcela de R$ ${val} paga com ${selectedAccount.name}`, "success");
-                              } catch (error) {
-                                console.error(error);
-                              }
-                            }
+                          onClick={() => {
+                            setPayingDebt(debt);
+                            setPayAmount((debt.installmentValue || 0).toString());
+                            if (accounts.length > 0) setPayAccount(accounts[0].id);
                           }}
                           className="flex-1 py-4 bg-slate-900 hover:bg-black text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-xl transition-all shadow-xl shadow-slate-200 active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
                           disabled={isProcessing}
@@ -2573,34 +2773,9 @@ export default function App() {
                         </button>
                         <button 
                           onClick={() => {
-                            if (isProcessing) return;
-                            const confirmPay = window.confirm(`Deseja quitar totalmente esta dívida?\n\nValor: R$ ${debt.totalAmount.toLocaleString('pt-BR')}`);
-                            if (!confirmPay) return;
-
-                            const accountNames = accounts.map((a, i) => `${i + 1}: ${a.name}`).join('\n');
-                            const accChoice = prompt(`Pagar com qual conta?\n\n${accountNames}\n\nDigite o número:`, '1');
-                            const accIdx = parseInt(accChoice || '1') - 1;
-                            const selectedAccount = accounts[accIdx];
-
-                            if (!selectedAccount) {
-                              alert("Conta não localizada. Quitação cancelada.");
-                              return;
-                            }
-
-                            (async () => {
-                              try {
-                                await addTransaction({
-                                  date: new Date().toISOString().split('T')[0],
-                                  description: `QUITAÇÃO: ${debt.description}`,
-                                  amount: debt.totalAmount,
-                                  type: 'expense',
-                                  category: 'folha',
-                                  accountId: selectedAccount.id,
-                                });
-                                await updateDebt(debt.id, { totalAmount: 0, status: 'paid', remainingInstallments: 0 });
-                                addNotification(`Dívida quitada com ${selectedAccount.name}`, "success");
-                              } catch (e) { console.error(e); }
-                            })();
+                            setPayingDebt(debt);
+                            setPayAmount(debt.totalAmount.toString());
+                            if (accounts.length > 0) setPayAccount(accounts[0].id);
                           }}
                           className="px-6 py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-100 transition-all flex items-center justify-center disabled:opacity-50"
                           disabled={isProcessing}
@@ -2911,67 +3086,83 @@ export default function App() {
                   Novo Colaborador
                 </button>
               ) : (
-                <div className="flex flex-col md:flex-row items-end gap-4 bg-white p-6 rounded-3xl shadow-xl border border-slate-200 animate-in fade-in slide-in-from-right-4 duration-300 max-w-4xl w-full">
-                  <div className="space-y-2 flex-1 w-full">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail</label>
-                    <input 
-                      type="email"
-                      placeholder="email@empresa.com"
-                      value={inviteEmail}
-                      onChange={(e) => setInviteEmail(e.target.value)}
-                      className="w-full px-4 py-3 text-sm font-bold text-slate-700 outline-none bg-slate-50 rounded-xl border border-slate-100 focus:border-orange-300 transition-colors"
-                      autoFocus
-                    />
+                <div className="w-full bg-slate-900 p-8 md:p-10 rounded-[3rem] shadow-2xl border border-slate-800 animate-in zoom-in-95 duration-300 mb-8">
+                  <div className="flex items-center gap-4 mb-8">
+                    <div className="w-12 h-12 bg-orange-500/10 rounded-2xl flex items-center justify-center text-orange-500">
+                      <UserPlus size={24} />
+                    </div>
+                    <div>
+                      <h3 className="text-white text-xl font-black uppercase italic tracking-tighter">Novo Colaborador</h3>
+                      <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest">Libere acesso ao painel financeiro</p>
+                    </div>
                   </div>
-                  <div className="space-y-2 flex-1 w-full">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha Inicial (Min. 6 Carac.)</label>
-                    <input 
-                      type="text"
-                      placeholder="Senha do colaborador"
-                      value={invitePassword}
-                      onChange={(e) => setInvitePassword(e.target.value)}
-                      className="w-full px-4 py-3 text-sm font-bold text-slate-700 outline-none bg-slate-50 rounded-xl border border-slate-100 focus:border-orange-300 transition-colors"
-                    />
-                  </div>
-                  <div className="space-y-2 w-full md:w-40">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Privilégio</label>
-                    <select 
-                      value={inviteRole}
-                      onChange={(e) => setInviteRole(e.target.value as UserRole)}
-                      className="w-full px-4 py-3 text-sm font-bold text-slate-700 outline-none bg-slate-50 rounded-xl border border-slate-100 focus:border-orange-300 transition-colors"
-                    >
-                      <option value="viewer">Visualizador</option>
-                      <option value="owner">Administrador</option>
-                    </select>
-                  </div>
-                  <div className="flex gap-2 shrink-0">
-                    <button 
-                      disabled={isRegisteringMember}
-                      onClick={async () => {
-                        if (inviteEmail && inviteEmail.includes('@')) {
-                          try {
-                            await addTeamMember(inviteEmail, inviteRole, invitePassword);
-                            setInviteEmail('');
-                            setInvitePassword('');
-                            setInviteRole('viewer');
-                            setShowInviteInput(false);
-                          } catch (e) {
-                            // Erro já tratado no addTeamMember
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-end">
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Endereço de E-mail</label>
+                      <input 
+                        type="email"
+                        placeholder="email@escola.com"
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        className="w-full px-6 py-4 text-sm font-bold text-white outline-none bg-slate-800/50 border border-slate-700 rounded-2xl focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all placeholder:text-slate-600"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Senha de Acesso</label>
+                      <input 
+                        type="text"
+                        placeholder="Mínimo 6 caracteres"
+                        value={invitePassword}
+                        onChange={(e) => setInvitePassword(e.target.value)}
+                        className="w-full px-6 py-4 text-sm font-bold text-white outline-none bg-slate-800/50 border border-slate-700 rounded-2xl focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all placeholder:text-slate-600"
+                      />
+                    </div>
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Nível de Acesso</label>
+                      <select 
+                        value={inviteRole}
+                        onChange={(e) => setInviteRole(e.target.value as UserRole)}
+                        className="w-full px-6 py-4 text-sm font-bold text-white outline-none bg-slate-800/50 border border-slate-700 rounded-2xl focus:border-orange-500 focus:ring-4 focus:ring-orange-500/10 transition-all appearance-none cursor-pointer"
+                      >
+                        <option value="viewer" className="bg-slate-900">Visualizador</option>
+                        <option value="cantina" className="bg-slate-900">Operador Cantina</option>
+                        <option value="manager" className="bg-slate-900">Gerente Financeiro</option>
+                        <option value="owner" className="bg-slate-900">Proprietário (Admin)</option>
+                      </select>
+                    </div>
+                    
+                    <div className="lg:col-span-3 flex flex-col md:flex-row gap-4 pt-4 mt-4 border-t border-slate-800/50">
+                      <button 
+                        disabled={isRegisteringMember}
+                        onClick={async () => {
+                          if (inviteEmail && inviteEmail.includes('@')) {
+                            try {
+                              await addTeamMember(inviteEmail, inviteRole, invitePassword);
+                              setInviteEmail('');
+                              setInvitePassword('');
+                              setInviteRole('viewer');
+                              setShowInviteInput(false);
+                            } catch (e) {
+                              // Erro já tratado
+                            }
+                          } else {
+                            alert('Por favor, informe um e-mail válido.');
                           }
-                        } else {
-                          alert('Por favor, informe um e-mail válido.');
-                        }
-                      }}
-                      className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-orange-100 active:scale-95 disabled:opacity-50"
-                    >
-                      {isRegisteringMember ? 'Processando...' : 'Autorizar e Criar'}
-                    </button>
-                    <button 
-                      onClick={() => setShowInviteInput(false)}
-                      className="px-6 py-3 text-slate-400 hover:text-slate-600 transition-colors text-[10px] font-black uppercase tracking-widest"
-                    >
-                      Cancelar
-                    </button>
+                        }}
+                        className="flex-1 bg-orange-600 hover:bg-orange-700 text-white py-5 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all shadow-2xl shadow-orange-900/20 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3"
+                      >
+                        {isRegisteringMember ? <Loader2 className="animate-spin" size={18} /> : <ShieldCheck size={18} />}
+                        {isRegisteringMember ? 'Processando Autenticação...' : 'Autorizar Acesso e Criar Conta'}
+                      </button>
+                      <button 
+                        onClick={() => setShowInviteInput(false)}
+                        className="px-8 py-5 text-slate-500 hover:text-white transition-colors text-[10px] font-black uppercase tracking-[0.2em] hover:bg-white/5 rounded-2xl"
+                      >
+                        Descartar
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -3011,9 +3202,17 @@ export default function App() {
                                  </div>
                               </div>
                            </td>
-                           <td className="px-8 py-6">
-                              <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${member.role === 'owner' ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-600'}`}>
-                                {member.role === 'owner' ? 'Proprietário' : 'Visualizador'}
+                          <td className="px-8 py-6">
+                              <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                                member.role === 'owner' ? 'bg-orange-100 text-orange-700' : 
+                                member.role === 'manager' ? 'bg-blue-100 text-blue-700' :
+                                member.role === 'cantina' ? 'bg-emerald-100 text-emerald-700' :
+                                'bg-slate-100 text-slate-600'
+                              }`}>
+                                {member.role === 'owner' ? 'Proprietário' : 
+                                 member.role === 'manager' ? 'Gerente' :
+                                 member.role === 'cantina' ? 'Operador Cantina' :
+                                 'Visualizador'}
                               </span>
                            </td>
                            <td className="px-8 py-6 text-sm">
@@ -3023,7 +3222,7 @@ export default function App() {
                              </div>
                            </td>
                            <td className="px-8 py-6 text-right flex items-center justify-end gap-2">
-                               {userRole === 'owner' && member.role === 'viewer' && (
+                               {userRole !== 'viewer' && member.role !== 'owner' && (
                                  <button 
                                    onClick={() => setEditingPermissionsMember(member)}
                                    className="text-slate-300 hover:text-orange-500 transition-colors p-2"
@@ -3032,7 +3231,17 @@ export default function App() {
                                    <ShieldCheck size={18} />
                                  </button>
                                )}
-                               {(isRootOwner ? member.email !== user?.email : member.role !== 'owner') && (
+                               {/* Special case: Owners can edit other owners if they are the root owner */}
+                               {userRole === 'owner' && member.role === 'owner' && isRootOwner && member.email !== user?.email && (
+                                 <button 
+                                   onClick={() => setEditingPermissionsMember(member)}
+                                   className="text-slate-300 hover:text-orange-500 transition-colors p-2"
+                                   title="Gerenciar Permissões"
+                                 >
+                                   <ShieldCheck size={18} />
+                                 </button>
+                               )}
+                               {userRole !== 'viewer' && (isRootOwner ? member.email !== user?.email : member.role !== 'owner') && (
                                 <button 
                                   onClick={() => setConfirmDeleteMember(member)}
                                   className="text-slate-300 hover:text-red-500 transition-colors p-2"
@@ -3537,6 +3746,7 @@ export default function App() {
                       category: (modalType === 'transfer' ? 'transferencia' : formData.get('category')) as Category,
                       accountId: formData.get('accountId') as string,
                       toAccountId: modalType === 'transfer' ? formData.get('toAccountId') as string : undefined,
+                      paymentMethod: formData.get('paymentMethod') as any,
                     } as any);
                   } catch (err: any) {
                     console.error("Erro crítico ao salvar:", err);
@@ -3578,25 +3788,44 @@ export default function App() {
                   </div>
 
                   {modalType !== 'transfer' ? (
-                    <div className="space-y-3">
-                      <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest ml-1 italic">01. Silo de Destinação (Categoria)</label>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                          {CATEGORIES.filter(c => !['transferencia', 'outros'].includes(c.value)).map(c => (
-                            <label key={c.value} className="relative cursor-pointer">
-                              <input 
-                                type="radio" 
-                                name="category" 
-                                value={c.value} 
-                                defaultChecked={editingTransaction ? editingTransaction.category === c.value : c.value === 'escola'} 
-                                className="sr-only peer" 
-                              />
-                              <div className="px-4 py-6 rounded-xl border border-slate-100 bg-slate-50 text-center transition-all peer-checked:border-blue-600 peer-checked:bg-white peer-checked:shadow-md hover:bg-white">
-                                <span className="text-[10px] font-black block uppercase tracking-tight text-slate-600 group-peer-checked:text-blue-600">{c.label}</span>
-                              </div>
-                            </label>
-                          ))}
+                    <>
+                      <div className="space-y-3">
+                        <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest ml-1 italic">01. Silo de Destinação (Categoria)</label>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            {CATEGORIES.filter(c => !['transferencia', 'outros'].includes(c.value)).map(c => (
+                              <label key={c.value} className="relative cursor-pointer">
+                                <input 
+                                  type="radio" 
+                                  name="category" 
+                                  value={c.value} 
+                                  id={`cat-${c.value}`}
+                                  defaultChecked={editingTransaction ? editingTransaction.category === c.value : (activeTab === 'cantina' ? c.value === 'cantina' : c.value === 'escola')} 
+                                  className="sr-only peer" 
+                                />
+                                <div className="px-4 py-6 rounded-xl border border-slate-100 bg-slate-50 text-center transition-all peer-checked:border-blue-600 peer-checked:bg-white peer-checked:shadow-md hover:bg-white">
+                                  <span className="text-[10px] font-black block uppercase tracking-tight text-slate-600 group-peer-checked:text-blue-600">{c.label}</span>
+                                </div>
+                              </label>
+                            ))}
+                        </div>
                       </div>
-                    </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Meio de Pagamento</label>
+                          <select 
+                            name="paymentMethod" 
+                            defaultValue={editingTransaction?.paymentMethod || 'cash'}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3.5 outline-none focus:border-blue-600 transition-all font-bold text-xs uppercase tracking-widest"
+                          >
+                            <option value="cash">💵 Dinheiro (Espécie)</option>
+                            <option value="pix">📱 PIX</option>
+                            <option value="card">💳 Cartão (Débito/Crédito)</option>
+                            <option value="other">Outros</option>
+                          </select>
+                        </div>
+                      </div>
+                    </>
                   ) : (
                     <div className="p-6 bg-indigo-50 border border-indigo-100 rounded-2xl">
                       <div className="flex items-center gap-3 text-indigo-700 mb-4">
@@ -3941,7 +4170,7 @@ export default function App() {
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Páginas Autorizadas</label>
                       <button 
                         onClick={() => {
-                          const allTabs = ['dashboard', 'transactions', 'debts', 'payables', 'reports'];
+                          const allTabs = ['dashboard', 'accounts', 'transactions', 'debts', 'payables', 'cantina', 'reports'];
                           setEditingPermissionsMember(prev => prev ? {
                             ...prev,
                             permissions: { ...prev.permissions, tabs: allTabs }
@@ -3955,10 +4184,12 @@ export default function App() {
                     <div className="grid grid-cols-1 gap-2">
                       {[
                         { id: 'dashboard', label: 'Início', icon: LayoutDashboard },
+                        { id: 'accounts', label: 'Silos (Contas)', icon: Wallet },
                         { id: 'transactions', label: 'Extrato', icon: History },
                         { id: 'debts', label: 'Dívidas', icon: CreditCard },
-                        { id: 'payables', label: 'Contas', icon: Calendar },
-                        { id: 'reports', label: 'Relatos', icon: Receipt },
+                        { id: 'payables', label: 'Agenda (Contas)', icon: Calendar },
+                        { id: 'cantina', label: 'Cantina', icon: Coffee },
+                        { id: 'reports', label: 'Relatos (DRE)', icon: Receipt },
                       ].map(tab => (
                         <label key={tab.id} className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl cursor-pointer hover:bg-slate-100 transition-all border border-transparent hover:border-slate-200 group">
                           <div className="flex items-center gap-3">
@@ -3971,7 +4202,7 @@ export default function App() {
                             type="checkbox"
                             checked={editingPermissionsMember.permissions?.tabs?.includes(tab.id) ?? true}
                             onChange={(e) => {
-                              const current = editingPermissionsMember.permissions?.tabs ?? ['dashboard', 'transactions', 'debts', 'payables', 'reports'];
+                              const current = editingPermissionsMember.permissions?.tabs ?? ['dashboard', 'accounts', 'transactions', 'debts', 'payables', 'cantina', 'reports'];
                               const next = e.target.checked 
                                 ? [...current, tab.id]
                                 : current.filter(v => v !== tab.id);
@@ -4073,7 +4304,7 @@ export default function App() {
                     onClick={() => updateMemberPermissions(editingPermissionsMember.email, editingPermissionsMember.permissions || {
                       categories: CATEGORIES.map(c => c.value),
                       accountId: accounts.map(s => s.id),
-                      tabs: ['dashboard', 'transactions', 'debts', 'payables', 'reports']
+                      tabs: ['dashboard', 'accounts', 'transactions', 'debts', 'payables', 'cantina', 'reports']
                     })}
                     className="flex-1 bg-slate-900 hover:bg-slate-800 text-white py-5 rounded-3xl font-black uppercase text-xs tracking-widest shadow-xl shadow-slate-100 transition-all active:scale-95"
                   >
@@ -4223,44 +4454,72 @@ export default function App() {
           </>
         )}
 
-        {confirmPayDebt && (
+        {payingDebt && (
           <>
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[150]"
-              onClick={() => setConfirmPayDebt(null)}
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[150]"
+              onClick={() => !isProcessing && setPayingDebt(null)}
             />
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0, scale: 0.95, y: 30 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-sm bg-white rounded-3xl p-8 z-[160] shadow-2xl border-t-8 border-emerald-500 text-center"
+              exit={{ opacity: 0, scale: 0.95, y: 30 }}
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-md bg-white rounded-[2.5rem] p-10 z-[160] shadow-2xl border border-slate-100"
             >
-              <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                <CheckCircle2 size={40} className="text-emerald-500" />
-              </div>
-              <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight mb-2">Liquidar Dívida?</h3>
-              <p className="text-sm text-slate-400 font-medium mb-8 text-center px-4">
-                Deseja marcar este compromisso como quitado integralmente?
-              </p>
-              
-              <div className="flex flex-col gap-3">
+              <div className="flex justify-between items-center mb-8">
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tighter">Baixar Dívida</h3>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{payingDebt.description}</p>
+                </div>
                 <button 
-                  onClick={() => {
-                    updateDebt(confirmPayDebt, { totalAmount: 0, status: 'paid', remainingInstallments: 0 });
-                    setConfirmPayDebt(null);
-                  }}
-                  className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-black uppercase text-xs tracking-widest shadow-lg shadow-emerald-100 transition-all active:scale-95"
+                  onClick={() => setPayingDebt(null)} 
+                  disabled={isProcessing}
+                  className="p-3 bg-slate-50 rounded-2xl text-slate-300 hover:text-slate-600 transition-all"
                 >
-                  Sim, liquidar agora
+                  <X size={20} />
                 </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Valor do Pagamento</label>
+                  <div className="relative">
+                    <span className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400 font-bold">R$</span>
+                    <input 
+                      type="text" 
+                      value={payAmount}
+                      onChange={(e) => setPayAmount(e.target.value)}
+                      disabled={isProcessing}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-14 pr-6 py-5 outline-none focus:ring-2 focus:ring-orange-500/20 text-lg font-mono font-bold text-slate-700 transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Conta de Origem</label>
+                  <select 
+                    value={payAccount}
+                    onChange={(e) => setPayAccount(e.target.value)}
+                    disabled={isProcessing}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-5 outline-none focus:ring-2 focus:ring-orange-500/20 appearance-none font-bold text-xs uppercase tracking-widest text-slate-700 cursor-pointer"
+                  >
+                    <option value="">Selecione uma conta</option>
+                    {accounts.map(acc => (
+                      <option key={acc.id} value={acc.id}>{acc.name} (R$ {acc.balance.toLocaleString('pt-BR')})</option>
+                    ))}
+                  </select>
+                </div>
+
                 <button 
-                  onClick={() => setConfirmPayDebt(null)}
-                  className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl font-black uppercase text-xs tracking-widest transition-all"
+                  onClick={executeDebtPayment}
+                  disabled={isProcessing || !payAccount || !payAmount || parseFloat(payAmount) <= 0}
+                  className="w-full py-5 bg-slate-900 hover:bg-black text-white rounded-2xl font-black uppercase text-xs tracking-[0.2em] shadow-xl shadow-slate-200 transition-all active:scale-95 disabled:opacity-30 flex items-center justify-center gap-3 mt-4"
                 >
-                  Não, cancelar
+                  {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <ShieldCheck size={18} />}
+                  Confirmar Pagamento
                 </button>
               </div>
             </motion.div>

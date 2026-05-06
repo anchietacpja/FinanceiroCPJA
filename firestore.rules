@@ -37,6 +37,24 @@ service cloud.firestore {
       );
     }
 
+    function isManagerOf(tenantId) {
+      return isSignedIn() && (
+        isOwnerOf(tenantId) ||
+        (exists(/databases/$(database)/documents/team_members/$(request.auth.token.email)) && 
+         get(/databases/$(database)/documents/team_members/$(request.auth.token.email)).data.tenantId == tenantId &&
+         get(/databases/$(database)/documents/team_members/$(request.auth.token.email)).data.role == 'manager')
+      );
+    }
+
+    function isCantinaOf(tenantId) {
+       return isSignedIn() && (
+         isManagerOf(tenantId) ||
+         (exists(/databases/$(database)/documents/team_members/$(request.auth.token.email)) && 
+          get(/databases/$(database)/documents/team_members/$(request.auth.token.email)).data.tenantId == tenantId &&
+          get(/databases/$(database)/documents/team_members/$(request.auth.token.email)).data.role == 'cantina')
+       );
+    }
+
     function isRootOwnerOf(tenantId) {
       return isSignedIn() && request.auth.uid == tenantId;
     }
@@ -52,77 +70,69 @@ service cloud.firestore {
     // --- team_members ---
     match /team_members/{email} {
       allow get: if isSignedIn() && (request.auth.token.email == email || isOwnerOf(resource.data.tenantId));
-      allow list: if isSignedIn() && isOwnerOf(resource.data.tenantId);
+      allow list: if isSignedIn() && isCantinaOf(resource.data.tenantId);
 
       allow create: if isSignedIn() && (
         // Self-registration as owner (happens on first login)
         (request.auth.token.email == email && incoming().role == 'owner' && incoming().tenantId == request.auth.uid) ||
-        // Owner inviting someone
-        (isOwnerOf(incoming().tenantId) && (incoming().role == 'viewer' || incoming().role == 'owner'))
+        // Staff inviting someone (only non-owners)
+        (isCantinaOf(incoming().tenantId) && (incoming().role in ['viewer', 'manager', 'cantina'])) ||
+        // Owners can invite anyone
+        (isOwnerOf(incoming().tenantId) && (incoming().role in ['viewer', 'owner', 'manager', 'cantina']))
       ) && incoming().email == email;
 
       allow delete: if isSignedIn() && (
-        // Root owner can delete any record except their personal record (to prevent locking themselves out if email matches)
+        // Root owner can delete any record except their personal record
         (isRootOwnerOf(resource.data.tenantId) && request.auth.token.email != email) ||
-        // Other owners can delete non-owners
-        (isOwnerOf(resource.data.tenantId) && resource.data.role != 'owner')
+        // Other staff can delete non-owners/non-managers if they have higher/equal role?
+        // Let's simplify: Owners can delete anyone except other owners. 
+        // Managers/Cantina can delete viewers.
+        (isOwnerOf(resource.data.tenantId) && resource.data.role != 'owner') ||
+        (isCantinaOf(resource.data.tenantId) && resource.data.role == 'viewer')
       );
 
-      allow update: if isSignedIn() && isOwnerOf(resource.data.tenantId) && (incoming().tenantId == resource.data.tenantId);
+      allow update: if isSignedIn() && isCantinaOf(resource.data.tenantId) && (incoming().tenantId == resource.data.tenantId);
     }
 
     // --- accounts ---
     match /accounts/{id} {
-      allow read: if isSignedIn() && (
-        resource.data.tenantId == request.auth.uid || 
-        isMemberOf(resource.data.tenantId)
-      );
-      allow write: if isSignedIn() && (
-        (request.method == 'create' && isOwnerOf(incoming().tenantId)) ||
-        (request.method != 'create' && isOwnerOf(resource.data.tenantId))
-      );
+      allow read: if isSignedIn() && isMemberOf(resource.data.tenantId);
+      allow write: if isSignedIn() && isOwnerOf(resource.data.tenantId);
     }
 
     // --- transfers ---
     match /transfers/{id} {
-      allow read: if isSignedIn() && (
-        resource.data.tenantId == request.auth.uid || 
-        isMemberOf(resource.data.tenantId)
-      );
-      allow write: if isSignedIn() && (
-        (request.method == 'create' && isOwnerOf(incoming().tenantId)) ||
-        (request.method != 'create' && isOwnerOf(resource.data.tenantId))
-      );
+      allow read: if isSignedIn() && isMemberOf(resource.data.tenantId);
+      allow write: if isSignedIn() && isManagerOf(resource.data.tenantId);
     }
 
     // --- transactions ---
     match /transactions/{id} {
       allow read: if isSignedIn() && isMemberOf(resource.data.userId);
       
-      allow create: if isSignedIn() && isOwnerOf(incoming().userId) && 
-                    isValidString(incoming().description, 200) &&
+      allow create: if isSignedIn() && isCantinaOf(incoming().userId) && 
+                    isValidString(incoming().description, 500) &&
                     incoming().amount is number;
                     
-      allow update: if isSignedIn() && isOwnerOf(resource.data.userId) &&
+      allow update: if isSignedIn() && isCantinaOf(resource.data.userId) &&
                     incoming().userId == resource.data.userId;
                     
-      allow delete: if isSignedIn() && isOwnerOf(resource.data.userId);
+      allow delete: if isSignedIn() && isManagerOf(resource.data.userId);
     }
 
     // --- debts ---
     match /debts/{id} {
-      // Members can see debts
       allow read: if isSignedIn() && isMemberOf(resource.data.userId);
-      allow create: if isSignedIn() && isOwnerOf(incoming().userId);
-      allow update: if isSignedIn() && isOwnerOf(resource.data.userId) && (incoming().userId == resource.data.userId);
+      allow create: if isSignedIn() && isManagerOf(incoming().userId);
+      allow update: if isSignedIn() && isManagerOf(resource.data.userId) && (incoming().userId == resource.data.userId);
       allow delete: if isSignedIn() && isOwnerOf(resource.data.userId);
     }
 
     // --- bills ---
     match /bills/{id} {
       allow read: if isSignedIn() && isMemberOf(resource.data.userId);
-      allow create: if isSignedIn() && isOwnerOf(incoming().userId);
-      allow update: if isSignedIn() && isOwnerOf(resource.data.userId) && (incoming().userId == resource.data.userId);
+      allow create: if isSignedIn() && isManagerOf(incoming().userId);
+      allow update: if isSignedIn() && isManagerOf(resource.data.userId) && (incoming().userId == resource.data.userId);
       allow delete: if isSignedIn() && isOwnerOf(resource.data.userId);
     }
   }

@@ -48,6 +48,7 @@ export interface Transaction {
   userId: string;
   createdAt: any;
   deleted?: boolean;
+  paymentMethod?: 'pix' | 'cash' | 'card' | 'other';
 }
 
 export interface Transfer {
@@ -99,7 +100,7 @@ export type WalletBalance = {
   balance: number;
 }
 
-export type UserRole = 'owner' | 'viewer';
+export type UserRole = 'owner' | 'manager' | 'cantina' | 'viewer';
 
 export interface TeamMember {
   id?: string;
