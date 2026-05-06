@@ -4,7 +4,7 @@
  */
 
 import { Category } from './types';
-export const APP_LOGO = '/dono.png';
+export const APP_LOGO = '/logo_anchieta.png';
 export const LOGO_ANCHIETA = '/logo_anchieta.png';
 export const LOGO_CPJA = '/logo_cpja.jpg';
 

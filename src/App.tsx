@@ -36,7 +36,6 @@ import {
   X,
   CreditCard,
   Landmark,
-  Target,
   ShieldAlert,
   UserPlus,
   UserMinus,
@@ -1308,7 +1307,7 @@ export default function App() {
               {/* Creator Highlight Box */}
               <div className="bg-slate-800/80 backdrop-blur-xl border border-white/10 p-6 rounded-[2rem] shadow-2xl flex items-center gap-5 group hover:bg-slate-800 transition-all">
                 <div className="w-14 h-14 bg-white rounded-2xl p-2.5 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                  <SafeLogo src={APP_LOGO} className="w-full h-full object-contain" alt="Creator Logo" fallbackIcon={Target} />
+                  <SafeLogo src={APP_LOGO} className="w-full h-full object-contain" alt="Creator Logo" fallbackIcon={Wallet} />
                 </div>
                 <div>
                   <p className="text-[10px] font-black uppercase text-orange-500 tracking-[0.4em] leading-none mb-1.5">Plataforma</p>
@@ -1453,7 +1452,7 @@ export default function App() {
                     <div className="space-y-2">
                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha de Acesso</label>
                       <div className="relative group">
-                        <Target size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-orange-500 transition-colors" />
+                        <User size={18} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-orange-500 transition-colors" />
                         <input 
                           name="password"
                           type="password" 
@@ -1524,7 +1523,7 @@ export default function App() {
               >
                 <div className="flex items-center gap-3">
                   <div className="bg-white rounded-2xl p-2.5 flex items-center justify-center shadow-lg border border-slate-100">
-                    <SafeLogo src={APP_LOGO} className="w-8 h-8 object-contain" alt="Nokite Logo" fallbackIcon={Target} />
+                    <SafeLogo src={APP_LOGO} className="w-8 h-8 object-contain" alt="Nokite Logo" fallbackIcon={Wallet} />
                   </div>
                   <div>
                     <p className="text-[9px] font-black uppercase text-white/40 tracking-[0.3em] leading-none mb-1.5">Arquitetura de Software</p>
@@ -1693,7 +1692,7 @@ export default function App() {
           <div className="hidden md:block pt-4 border-t border-slate-100 mt-2 bg-white/50 rounded-t-2xl -mx-4 px-4 pb-2 group/dev">
             <div className="flex flex-col items-center gap-1.5 transition-all duration-500">
                <div className="w-8 h-8 bg-white rounded-lg p-1 border border-slate-200 shadow-sm group-hover/dev:shadow-md transition-all group-hover/dev:scale-105">
-                 <SafeLogo src={APP_LOGO} className="w-full h-full object-contain" alt="Nokite Logo" fallbackIcon={Target} />
+                 <SafeLogo src={APP_LOGO} className="w-full h-full object-contain" alt="Nokite Logo" fallbackIcon={Wallet} />
                </div>
                <div className="text-center">
                  <p className="text-[6px] font-black text-slate-400 uppercase tracking-[0.5em] mb-0.5 opacity-60 leading-none">Desenvolvido por</p>
@@ -2656,7 +2655,7 @@ export default function App() {
               {/* Primary Summary Bento Card */}
               <div className="md:col-span-2 bg-white border-2 border-slate-900 rounded-[2.5rem] p-10 relative overflow-hidden shadow-[12px_12px_0px_0px_rgba(15,23,42,1)]">
                 <div className="absolute top-0 right-0 m-8 opacity-5">
-                   <Target size={120} />
+                   <Receipt size={120} />
                 </div>
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-8">Consolidado Devedor</h3>
                 <div className="grid grid-cols-2 gap-8 relative z-10">
