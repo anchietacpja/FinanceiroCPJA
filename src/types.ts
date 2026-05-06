@@ -16,17 +16,6 @@ export type Category =
   | 'transferencia' 
   | 'ajuste';
 
-export type FundSource = 
-  | 'caixa_fisico' 
-  | 'bb_corrente' 
-  | 'bb_poupanca' 
-  | 'mercado_pago' 
-  | 'nubank' 
-  | 'ton' 
-  | 'caixa_poupanca' 
-  | 'pessoal' 
-  | 'cantina';
-
 export interface Account {
   id: string;
   name: string;
@@ -92,12 +81,6 @@ export interface Bill {
   billType: 'fixed' | 'variable';
   userId: string;
   createdAt: any;
-}
-
-export type WalletBalance = {
-  id: FundSource;
-  name: string;
-  balance: number;
 }
 
 export type UserRole = 'owner' | 'manager' | 'cantina' | 'viewer';

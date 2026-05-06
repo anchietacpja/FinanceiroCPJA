@@ -79,6 +79,7 @@ const SafeLogo = ({ src, alt, className = "", fallbackIcon: Fallback = School }:
           key={src}
           src={src} 
           alt={alt} 
+          referrerPolicy="no-referrer"
           className={`w-full h-full object-contain transition-opacity duration-300 ${loading ? 'opacity-0' : 'opacity-100'}`} 
           onLoad={() => setLoading(false)}
           onError={(e) => {
@@ -92,8 +93,8 @@ const SafeLogo = ({ src, alt, className = "", fallbackIcon: Fallback = School }:
   );
 };
 import { motion, AnimatePresence } from 'motion/react';
-import { Transaction, Category, FundSource, Debt, Bill, UserRole, TeamMember, Account, Transfer } from './types';
-import { CATEGORIES, FUND_SOURCES, LOGO_ANCHIETA, LOGO_CPJA, SCHOOL_NAME, PLATFORM_NAME, APP_LOGO } from './constants';
+import { Transaction, Category, Debt, Bill, UserRole, TeamMember, Account, Transfer } from './types';
+import { CATEGORIES, LOGO_ANCHIETA, LOGO_CPJA, SCHOOL_NAME, PLATFORM_NAME, APP_LOGO } from './constants';
 import { auth, db, signInWithGoogle, loginWithEmail, registerWithEmail, createCollaboratorAccount, logout, handleFirestoreError } from './lib/firebase';
 import { exportTransactionsToCSV, exportTransactionsToPDF } from './lib/export';
 import { learnCategories, suggestCategory, parseStatementLine, normalizeDate } from './lib/intelligence';
@@ -155,11 +156,38 @@ export default function App() {
   const [reportYear, setReportYear] = useState<number>(new Date().getFullYear());
   const [reportMonth, setReportMonth] = useState<string | 'all'>(new Date().getMonth().toString());
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [modalCategory, setModalCategory] = useState<Category>('escola');
+  const [modalAccountId, setModalAccountId] = useState<string>('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmDeleteMember, setConfirmDeleteMember] = useState<TeamMember | null>(null);
   const [confirmDeleteDebt, setConfirmDeleteDebt] = useState<string | null>(null);
   const [confirmDeleteBill, setConfirmDeleteBill] = useState<string | null>(null);
   const [editingPermissionsMember, setEditingPermissionsMember] = useState<TeamMember | null>(null);
+  
+  // PWA Install logic
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstall = async () => {
+    if (!installPrompt) {
+      alert("Para instalar o Nokite Hub:\n\n📱 No iOS (iPhone/Safari): Toque no ícone de Compartilhar (quadrado com seta) e role até encontrar 'Adicionar à Tela de Início'.\n\n🌐 No Android/Chrome: Toque nos três pontos do navegador e selecione 'Instalar aplicativo' ou 'Adicionar à tela inicial'.");
+      return;
+    }
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setInstallPrompt(null);
+    }
+  };
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1551,6 +1579,13 @@ export default function App() {
          </div>
 
         <div className="flex-1 flex flex-row md:flex-col items-center justify-start md:justify-start px-4 md:px-3 md:mt-2 md:space-y-1 overflow-x-auto md:overflow-y-auto custom-scrollbar scrollbar-hide gap-4 md:gap-0">
+          <button 
+            onClick={handleInstall}
+            className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 w-auto md:w-full p-2 md:px-4 md:py-3.5 rounded-2xl transition-all ${installPrompt ? 'bg-blue-600 animate-pulse text-white' : 'bg-slate-100 text-slate-500'} shadow-lg min-w-[70px] hover:scale-105 transition-transform`}
+          >
+            <Download size={20} />
+            <span className="font-black text-[9px] md:text-xs uppercase tracking-widest leading-none text-center">Baixar App</span>
+          </button>
           {(userRole === 'owner' || userRole === 'manager' || (userPermissions?.tabs?.includes('dashboard') ?? true)) && (
             <button 
               onClick={() => setActiveTab('dashboard')}
@@ -1561,7 +1596,7 @@ export default function App() {
             </button>
           )}
 
-          {(userRole === 'owner' || userRole === 'manager' || userRole === 'cantina' || (userPermissions?.tabs?.includes('cantina') ?? false)) && (
+          {(userRole === 'owner' || userRole === 'manager' || userRole === 'cantina' || (userPermissions?.tabs?.includes('cantina') ?? true)) && (
             <button 
               onClick={() => setActiveTab('cantina')}
               className={`flex flex-col md:flex-row items-center gap-1 md:gap-3 w-auto md:w-full p-2 md:px-4 md:py-3.5 rounded-2xl transition-all ${activeTab === 'cantina' ? 'bg-emerald-50 text-emerald-600 shadow-sm border border-emerald-100' : 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50/50'}`}
@@ -1641,7 +1676,7 @@ export default function App() {
 
         <div className="hidden md:block p-4 border-t border-slate-100 mt-auto">
           <div className="flex items-center gap-3 mb-4 px-2 hidden md:flex">
-             <img src={user.photoURL || ''} alt="" className="w-8 h-8 rounded-lg border-2 border-white shadow-sm" />
+             <img src={user.photoURL || ''} alt="" referrerPolicy="no-referrer" className="w-8 h-8 rounded-lg border-2 border-white shadow-sm" />
              <div className="overflow-hidden">
                <p className="text-[10px] font-bold text-slate-800 truncate leading-none mb-0.5">{user.displayName}</p>
                <p className="text-[9px] text-slate-400 font-medium truncate leading-none">{user.email}</p>
@@ -1704,8 +1739,26 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-                  <div className="bg-white/80 backdrop-blur-md border border-slate-200 p-1 rounded-2xl shadow-sm flex">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+            {/* Digital Account Silos Overview */}
+            <div className="hidden lg:flex items-center gap-3 bg-white/40 backdrop-blur-md border border-slate-200/50 p-2 rounded-2xl shadow-sm overflow-hidden">
+              {accounts.map(acc => (
+                <div key={acc.id} className="flex flex-col px-4 py-2 border-r border-slate-100 last:border-0 min-w-[140px] group/acc hover:bg-white/50 transition-all rounded-xl">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className={`w-2 h-2 rounded-full shadow-sm ${acc.color || 'bg-slate-400'}`} />
+                    <span className="text-[9px] font-black uppercase text-slate-500 tracking-tighter truncate max-w-[100px] font-sans">{acc.name}</span>
+                  </div>
+                  <span className="text-sm font-mono font-black text-slate-900 tabular-nums">
+                    R$ {(balances[acc.id] || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              ))}
+              {accounts.length === 0 && (
+                <p className="text-[9px] font-black text-slate-300 uppercase px-4">Nenhuma conta ativa</p>
+              )}
+            </div>
+
+            <div className="bg-white/80 backdrop-blur-md border border-slate-200 p-1 rounded-2xl shadow-sm flex">
                     {[
                       { id: 'thisMonth', label: 'Mês Atual' },
                       { id: 'lastMonth', label: 'Anterior' },
@@ -1781,6 +1834,8 @@ export default function App() {
                   <button 
                     onClick={() => {
                       setModalType('expense');
+                      setModalCategory(activeTab === 'cantina' ? 'cantina' : 'escola');
+                      setModalAccountId(accounts[0]?.id || '');
                       setShowAddModal(true);
                     }}
                     className="bg-orange-500 hover:bg-orange-600 text-white font-black py-4 px-10 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-xl shadow-orange-100 active:scale-95 uppercase text-[10px] tracking-widest"
@@ -1791,6 +1846,7 @@ export default function App() {
                   <button 
                     onClick={() => {
                       setModalType('transfer');
+                      setModalAccountId(accounts[0]?.id || '');
                       setShowAddModal(true);
                     }}
                     className="bg-slate-900 hover:bg-black text-white font-black py-4 px-8 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-xl shadow-slate-200 active:scale-95 uppercase text-[10px] tracking-widest"
@@ -2525,6 +2581,8 @@ export default function App() {
                                   onClick={() => {
                                     setEditingTransaction(t);
                                     setModalType(t.type);
+                                    setModalCategory(t.category);
+                                    setModalAccountId(t.accountId);
                                     setShowAddModal(true);
                                   }}
                                   className="p-2 text-slate-300 hover:text-orange-600 transition-colors"
@@ -3789,26 +3847,27 @@ export default function App() {
 
                   {modalType !== 'transfer' ? (
                     <>
-                      <div className="space-y-3">
-                        <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest ml-1 italic">01. Silo de Destinação (Categoria)</label>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                            {CATEGORIES.filter(c => !['transferencia', 'outros'].includes(c.value)).map(c => (
-                              <label key={c.value} className="relative cursor-pointer">
-                                <input 
-                                  type="radio" 
-                                  name="category" 
-                                  value={c.value} 
-                                  id={`cat-${c.value}`}
-                                  defaultChecked={editingTransaction ? editingTransaction.category === c.value : (activeTab === 'cantina' ? c.value === 'cantina' : c.value === 'escola')} 
-                                  className="sr-only peer" 
-                                />
-                                <div className="px-4 py-6 rounded-xl border border-slate-100 bg-slate-50 text-center transition-all peer-checked:border-blue-600 peer-checked:bg-white peer-checked:shadow-md hover:bg-white">
-                                  <span className="text-[10px] font-black block uppercase tracking-tight text-slate-600 group-peer-checked:text-blue-600">{c.label}</span>
-                                </div>
-                              </label>
-                            ))}
-                        </div>
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest ml-1 italic">01. Silo de Destinação (Categoria)</label>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          {CATEGORIES.filter(c => !['transferencia', 'outros'].includes(c.value)).map(c => (
+                            <label key={c.value} className="relative cursor-pointer">
+                              <input 
+                                type="radio" 
+                                name="category" 
+                                value={c.value} 
+                                id={`cat-${c.value}`}
+                                checked={modalCategory === c.value}
+                                onChange={(e) => setModalCategory(e.target.value as Category)}
+                                className="sr-only peer" 
+                              />
+                              <div className="px-4 py-6 rounded-xl border border-slate-100 bg-slate-50 text-center transition-all peer-checked:border-blue-600 peer-checked:bg-white peer-checked:shadow-md hover:bg-white">
+                                <span className="text-[10px] font-black block uppercase tracking-tight text-slate-600 group-peer-checked:text-blue-600">{c.label}</span>
+                              </div>
+                            </label>
+                          ))}
                       </div>
+                    </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
                         <div className="space-y-2">
@@ -3846,13 +3905,31 @@ export default function App() {
                       <select 
                         name="accountId" 
                         required 
-                        defaultValue={editingTransaction?.accountId}
+                        value={modalAccountId}
+                        onChange={(e) => setModalAccountId(e.target.value)}
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3.5 outline-none focus:border-emerald-600 transition-all font-bold text-xs uppercase tracking-widest"
                       >
+                        <option value="">Selecione a conta...</option>
                         {accounts.map(acc => (
                           <option key={acc.id} value={acc.id}>{acc.name}</option>
                         ))}
                       </select>
+                      {modalType !== 'transfer' && modalAccountId && modalCategory && (
+                        (() => {
+                           const acc = accounts.find(a => a.id === modalAccountId);
+                           const accName = (acc?.name || '').toLowerCase();
+                           const isMixed = (modalCategory === 'pessoal' && !accName.includes('pessoal')) ||
+                                           ((modalCategory === 'escola' || modalCategory === 'mensalidade') && accName.includes('pessoal'));
+                           
+                           if (isMixed) return (
+                             <div className="flex items-center gap-2 p-3 bg-red-50 rounded-xl mt-2 animate-pulse border border-red-100">
+                               <AlertCircle size={14} className="text-red-500" />
+                               <span className="text-[9px] font-black text-red-600 uppercase tracking-tighter">ALERTA: Mistura de dinheiro detectada! Use silo apropriado.</span>
+                             </div>
+                           );
+                           return null;
+                        })()
+                      )}
                     </div>
 
                     {modalType === 'transfer' && (

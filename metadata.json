@@ -1,6 +1,6 @@
 {
-  "name": "FinanceiroCPJA",
-  "description": "Sistema de gestão financeira para separar gastos escolares, pessoais e da cantina, eliminando confusão de fluxo de caixa.",
+  "name": "Nokite Hub Financeiro",
+  "description": "Hub financeiro estratégico para o Colégio Anchieta CPJA. Gestão integrada de ativos educacionais, cantina e controle pessoal.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

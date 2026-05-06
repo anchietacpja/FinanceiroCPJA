@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Category, FundSource } from './types';
+import { Category } from './types';
 export const APP_LOGO = '/dono.png';
 export const LOGO_ANCHIETA = '/logo_anchieta.png';
 export const LOGO_CPJA = '/logo_cpja.jpg';
@@ -20,18 +20,6 @@ export const CATEGORIES: { value: Category; label: string; color: string }[] = [
   { value: 'transferencia', label: 'Transf.', color: 'bg-blue-500' },
   { value: 'ajuste', label: 'Ajuste', color: 'bg-slate-700' },
   { value: 'outros', label: 'Outros', color: 'bg-slate-400' },
-];
-
-export const FUND_SOURCES: { value: FundSource; label: string }[] = [
-  { value: 'caixa_fisico', label: 'Dinheiro Físico (Caixa)' },
-  { value: 'bb_corrente', label: 'Banco do Brasil - Corrente' },
-  { value: 'bb_poupanca', label: 'Banco do Brasil - Poupança' },
-  { value: 'mercado_pago', label: 'Mercado Pago' },
-  { value: 'nubank', label: 'Nubank' },
-  { value: 'ton', label: 'Ton' },
-  { value: 'caixa_poupanca', label: 'Caixa Econômica Federal - Poupança' },
-  { value: 'pessoal', label: 'Dinheiro Pessoal' },
-  { value: 'cantina', label: 'Caixa da Cantina' },
 ];
 
 export const SCHOOL_NAME = "Colégio Anchieta CPJA";

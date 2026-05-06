@@ -1,0 +1,21 @@
+{
+  "short_name": "Nokite Hub",
+  "name": "Nokite Hub Financeiro",
+  "description": "Gestão Financeira Educacional CPJA",
+  "icons": [
+    {
+      "src": "https://img.icons8.com/color/192/target.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://img.icons8.com/color/512/target.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#f97316",
+  "background_color": "#ffffff"
+}
